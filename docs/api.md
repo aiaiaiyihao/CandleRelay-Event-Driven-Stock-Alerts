@@ -4,15 +4,15 @@ http://localhost:8000/docs
 ## API Overview
 
 ### Request/Response Examples
-🔹 GET /prices/latest
+GET /prices/latest
 Description:
 Fetches the latest market price for a given symbol from the specified data provider.
 
 Query Parameters:
 
-Name	Type	Required	Description
-symbol	string	✅ Yes	The stock/asset symbol
-provider	string	❌ No	Data provider (e.g., yfinance, alpha_vantage). Defaults to system default if omitted.
+Name	  Type	Required	Description
+symbol	 string	 Yes	     The stock/asset symbol
+provider string	  No	     Data provider (e.g., yfinance, alpha_vantage). Defaults to system default if omitted.
 
 Responses:
 Code	Description
@@ -29,7 +29,7 @@ Example Response:
   "timestamp": "2025-06-15T10:11:14.544141",
   "provider": "yfinance"
 }
-🔹 POST /prices/poll
+POST /prices/poll
 Description:
 Starts a polling job that fetches market prices at regular intervals for one or more symbols.
 
@@ -40,9 +40,9 @@ Request Body:
   "interval": 20
 }
 Field	Type	Required	Description
-symbols	string[]	✅ Yes	List of asset symbols to poll
-provider	string	✅ Yes	Data provider (e.g., yfinance)
-interval	int	✅ Yes	Polling interval in seconds
+symbols	string[]  Yes	List of asset symbols to poll
+provider	string Yes	Data provider (e.g., yfinance)
+interval	int	   Yes	Polling interval in seconds
 
 Responses:
 
@@ -69,11 +69,6 @@ Example Response:
   }
 }
 
-
-
-
-### Rate Limits
-Planned: 60 req/min/IP
 
 ### Error Codes
 - 400: Invalid request
