@@ -40,7 +40,7 @@ market-data-service/
 
 ```bash
 # 1. clone private repo
-$ git clone git@github.com:<org>/market-data-service.git
+$ git clone git@github.com:aiaiaiyihao/market-data-service.git
 $ cd market-data-service
 
 # 2. spin up infra (Postgres, Redis, Kafka, FastAPI)
@@ -65,7 +65,7 @@ open http://localhost:8000/docs
 
 ---
 
-## 🛠️  Manual dev venv
+## Manual dev venv
 
 ```bash
 python -m venv venv && source venv/bin/activate
