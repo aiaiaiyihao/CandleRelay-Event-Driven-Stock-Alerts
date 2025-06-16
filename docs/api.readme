@@ -1,0 +1,81 @@
+## Swagger
+http://localhost:8000/docs
+
+## API Overview
+
+### Request/Response Examples
+🔹 GET /prices/latest
+Description:
+Fetches the latest market price for a given symbol from the specified data provider.
+
+Query Parameters:
+
+Name	Type	Required	Description
+symbol	string	✅ Yes	The stock/asset symbol
+provider	string	❌ No	Data provider (e.g., yfinance, alpha_vantage). Defaults to system default if omitted.
+
+Responses:
+Code	Description
+200	Success
+400	Invalid request parameters
+404	Data not found
+
+Example Request:
+GET http://localhost:8000/prices/latest?symbol=OP&provider=yfinance
+Example Response:
+{
+  "symbol": "OP",
+  "price": 1.61,
+  "timestamp": "2025-06-15T10:11:14.544141",
+  "provider": "yfinance"
+}
+🔹 POST /prices/poll
+Description:
+Starts a polling job that fetches market prices at regular intervals for one or more symbols.
+
+Request Body:
+{
+  "symbols": ["TSLA", "MSFT"],
+  "provider": "yfinance",
+  "interval": 20
+}
+Field	Type	Required	Description
+symbols	string[]	✅ Yes	List of asset symbols to poll
+provider	string	✅ Yes	Data provider (e.g., yfinance)
+interval	int	✅ Yes	Polling interval in seconds
+
+Responses:
+
+Code	Description
+201	Job accepted and started
+400	Invalid request payload
+
+Example Request:
+POST http://localhost:8000/prices/poll
+Request Body:
+{
+  "symbols": ["TSLA", "MSFT"],
+  "provider": "yfinance",
+  "interval": 20
+}
+Example Response:
+{
+  "job_id": "250cce99-b0de-4b4a-85f4-5fed2a132421",
+  "status": "accepted",
+  "config": {
+    "symbols": ["TSLA", "MSFT"],
+    "interval": 20,
+    "provider": "yfinance"
+  }
+}
+
+
+
+
+### Rate Limits
+Planned: 60 req/min/IP
+
+### Error Codes
+- 400: Invalid request
+- 404: Data not found
+- 500: Internal error
