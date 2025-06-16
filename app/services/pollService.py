@@ -13,7 +13,7 @@ async def _poll_loop(job_data: dict) -> None:
     fetch_price_by_provider() for each symbol in the job.
     """
     logging.info(
-        f"▶️ Polling job {job_data['id']}: {job_data['symbols']} every {job_data['interval']}s "
+        f"Polling job {job_data['id']}: {job_data['symbols']} every {job_data['interval']}s "
         f"via {job_data['provider']}"
     )
 
@@ -30,7 +30,7 @@ async def _poll_loop(job_data: dict) -> None:
             try:
                 await fetch_price_by_provider(job_data['provider'], symbol,True)
             except Exception as exc:
-                logging.error(f"❌ {symbol}: {exc}")
+                logging.error(f"{symbol}: {exc}")
 
         # 3️⃣ Update last_run_at
         with SessionLocal() as session:

@@ -56,8 +56,8 @@ async def fetch_price_by_provider(provider: str, symbol: str, poll: bool):
     if isinstance(data.get("timestamp"), datetime):
         data["timestamp"] = data["timestamp"].isoformat()
 
-    # 4 Cache the result in Redis (10 s)
-    await redis.set(cache_key, json.dumps(data), ex=100)
+    # 4 Cache the result in Redis (10 secs will expire)
+    await redis.set(cache_key, json.dumps(data), ex=10)
     logging.info(
         f"Cached result: {symbol} | price={data['price']} | ts={data['timestamp']} (TTL=10s)"
     )
