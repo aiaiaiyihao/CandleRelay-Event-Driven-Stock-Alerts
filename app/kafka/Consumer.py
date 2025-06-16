@@ -64,7 +64,7 @@ def process_event(event: dict) -> None:
 
 # Main polling loop
 def run() -> None:
-    logging.info("🚀 Starting MA Consumer… listening on 'price-events'")
+    logging.info("Starting MA Consumer… listening on 'price-events'")
     while True:
         msg = consumer.poll(1.0)
         if msg is None:

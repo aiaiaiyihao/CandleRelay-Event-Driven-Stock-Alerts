@@ -19,28 +19,28 @@ Base.metadata.create_all(bind=engine)
 #graceful shutdown
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logging.info("🚀 Application starting…")
+    logging.info("Application starting…")
     # (Put any startup init here, e.g. warm-up caches)
 
     yield  # ←—— FastAPI serves requests here ———————————
 
     # ── Shutdown section (after `yield`) ───────────────
-    logging.info("🔻 Shutting down application…")
+    logging.info("Shutting down application…")
 
     # Close Redis
     try:
         await redis.close()
         await redis.connection_pool.disconnect()
-        logging.info("✅ Redis connection closed.")
+        logging.info("Redis connection closed.")
     except Exception as e:
-        logging.error(f"⚠️ Redis shutdown error: {e}")
+        logging.error(f"Redis shutdown error: {e}")
 
     # Flush & close Kafka producer
     try:
         producer.flush()
-        logging.info("✅ Kafka producer flushed.")
+        logging.info("Kafka producer flushed.")
     except Exception as e:
-        logging.error(f"⚠️ Kafka flush error: {e}")
+        logging.error(f"Kafka flush error: {e}")
 app = FastAPI(debug=True, lifespan=lifespan)
 
 logging.basicConfig(

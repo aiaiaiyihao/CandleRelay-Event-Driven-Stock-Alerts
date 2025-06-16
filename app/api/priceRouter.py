@@ -8,6 +8,7 @@ from app.core.config import get_db
 
 router = APIRouter()
 
+#get the latest price get request by symbol and provider
 @router.get("/prices/latest")
 async def get_latest_price(symbol: str = Query(...), provider: str = "yfinance"):
     try:
@@ -19,7 +20,7 @@ async def get_latest_price(symbol: str = Query(...), provider: str = "yfinance")
         raise HTTPException(status_code=500, detail="Unexpected internal error")
 
 
-
+#start a polling job by a list of symbols post request
 @router.post("/prices/poll", response_model=PollAccepted, status_code=status.HTTP_202_ACCEPTED)
 async def poll_prices(req: PollRequest, db: Session = Depends(get_db)):
     """

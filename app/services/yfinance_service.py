@@ -1,6 +1,7 @@
 import yfinance as yf
 from datetime import datetime
 
+#call remote api to fetch price
 async def fetch_price_yfinance(symbol: str):
     try:
         data = yf.Ticker(symbol)
