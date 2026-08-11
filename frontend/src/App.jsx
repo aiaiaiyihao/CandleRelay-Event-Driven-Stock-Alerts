@@ -369,7 +369,6 @@ function App() {
     window.clearTimeout(previewTimer.current)
     previewTimer.current = window.setTimeout(() => {
       setSelectedSymbol(symbol.toUpperCase())
-      setSearch(symbol.toUpperCase())
     }, 400)
   }
 
