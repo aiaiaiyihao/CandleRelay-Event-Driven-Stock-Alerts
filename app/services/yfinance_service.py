@@ -4,6 +4,8 @@ import asyncio
 
 
 CHART_RANGES = {"1mo", "3mo", "6mo", "1y"}
+CHART_POINT_LIMITS = {"1mo": 22, "3mo": 66, "6mo": 132, "1y": 252}
+CHART_HISTORY_PERIOD = "2y"
 
 #call remote api to fetch price
 async def fetch_price_yfinance(symbol: str):
@@ -24,13 +26,42 @@ async def fetch_price_yfinance(symbol: str):
     }
 
 
+async def search_stocks_yfinance(query: str, limit: int = 6) -> list[dict]:
+    def load_results():
+        return yf.Search(
+            query,
+            max_results=limit,
+            news_count=0,
+            lists_count=0,
+            include_cb=False,
+            recommended=0,
+        ).quotes
+
+    try:
+        quotes = await asyncio.to_thread(load_results)
+    except Exception as exc:
+        raise ValueError(f"yfinance search error for '{query}': {exc}") from exc
+
+    supported_types = {"EQUITY", "ETF"}
+    return [
+        {
+            "symbol": quote["symbol"].upper(),
+            "name": quote.get("longname") or quote.get("shortname") or quote["symbol"],
+            "exchange": quote.get("exchDisp") or quote.get("exchange") or "Market",
+            "type": quote.get("quoteType", "EQUITY"),
+        }
+        for quote in quotes
+        if quote.get("quoteType") in supported_types
+    ][:limit]
+
+
 async def fetch_chart_yfinance(symbol: str, chart_range: str) -> dict:
     if chart_range not in CHART_RANGES:
         raise ValueError(f"Unsupported chart range: {chart_range}")
 
     def load_history():
         return yf.Ticker(symbol).history(
-            period=chart_range,
+            period=CHART_HISTORY_PERIOD,
             interval="1d",
             auto_adjust=False,
         )
@@ -42,6 +73,17 @@ async def fetch_chart_yfinance(symbol: str, chart_range: str) -> dict:
     if history.empty:
         raise ValueError(f"No chart data found for symbol: {symbol}")
 
+    points = build_chart_points(history)
+    points = points[-CHART_POINT_LIMITS[chart_range]:]
+    return {
+        "symbol": symbol.upper(),
+        "range": chart_range,
+        "interval": "1d",
+        "points": points,
+    }
+
+
+def build_chart_points(history) -> list[dict]:
     closes = [float(value) for value in history["Close"].tolist()]
     averages = {
         period: moving_average(closes, period)
@@ -62,12 +104,7 @@ async def fetch_chart_yfinance(symbol: str, chart_range: str) -> dict:
                 "sma_200": averages[200][index],
             }
         )
-    return {
-        "symbol": symbol.upper(),
-        "range": chart_range,
-        "interval": "1d",
-        "points": points,
-    }
+    return points
 
 
 def moving_average(values: list[float], period: int) -> list[float | None]:
