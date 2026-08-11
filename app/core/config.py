@@ -9,6 +9,14 @@ from sqlalchemy.orm.session import sessionmaker
 APP_NAME = os.getenv("APP_NAME", "SignalForge")
 APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
 APP_DEBUG = os.getenv("APP_DEBUG", "false").lower() in {"1", "true", "yes"}
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:5173,http://localhost:3000",
+    ).split(",")
+    if origin.strip()
+]
 
 producer_config = {
     "bootstrap.servers": os.getenv("KAFKA_BOOTSTRAP", "localhost:9092"),
