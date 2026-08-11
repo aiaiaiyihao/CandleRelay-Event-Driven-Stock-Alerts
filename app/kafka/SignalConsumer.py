@@ -24,7 +24,8 @@ class SignalConsumerWorker:
         if message is None:
             return False
         if message.error():
-            raise RuntimeError(str(message.error()))
+            logging.warning("Kafka consumer event: %s", message.error())
+            return False
 
         alert_count = self.process_payload(message.value())
         self.consumer.commit(message=message, asynchronous=False)
@@ -53,4 +54,3 @@ def build_worker() -> SignalConsumerWorker:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
     build_worker().run()
-

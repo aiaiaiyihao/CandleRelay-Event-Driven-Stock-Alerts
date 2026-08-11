@@ -7,14 +7,15 @@ from app.kafka.market_events import encode_market_event
 
 
 class FakeMessage:
-    def __init__(self, payload):
+    def __init__(self, payload, error=None):
         self._payload = payload
+        self._error = error
 
     def value(self):
         return self._payload
 
     def error(self):
-        return None
+        return self._error
 
     def partition(self):
         return 0
@@ -91,4 +92,13 @@ def test_does_not_commit_offset_when_processing_fails():
     else:
         raise AssertionError("expected processing failure")
 
+    assert consumer.committed == []
+
+
+def test_keeps_running_when_topic_is_not_available_yet():
+    consumer = FakeConsumer(FakeMessage(None, error="unknown topic"))
+    factory = sessionmaker(bind=create_engine("sqlite:///:memory:"))
+    signal_worker = SignalConsumerWorker(consumer, factory, FakeProcessor())
+
+    assert signal_worker.run_once() is False
     assert consumer.committed == []
