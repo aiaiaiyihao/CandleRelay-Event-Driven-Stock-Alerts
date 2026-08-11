@@ -3,12 +3,15 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_db
 from app.schemas.rule import (
+    RuleCompileRequest,
     RuleCreate,
     RuleResponse,
     RuleStatusUpdate,
     RuleUpdate,
     RuleVersionResponse,
 )
+from app.compilers.base import CompilationResult, ValidatedRuleCompiler
+from app.compilers.heuristic import HeuristicCompilerProvider, UnsupportedRuleText
 from app.services.ruleService import (
     create_rule,
     get_rule,
@@ -20,6 +23,17 @@ from app.services.ruleService import (
 
 
 router = APIRouter(prefix="/rules", tags=["rules"])
+
+
+@router.post("/compile", response_model=CompilationResult)
+def compile_rule(request: RuleCompileRequest):
+    compiler = ValidatedRuleCompiler(
+        HeuristicCompilerProvider(cooldown_seconds=request.cooldown_seconds)
+    )
+    try:
+        return compiler.compile(request.text)
+    except (ValueError, UnsupportedRuleText) as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 @router.post("", response_model=RuleResponse, status_code=status.HTTP_201_CREATED)

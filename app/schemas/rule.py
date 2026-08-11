@@ -34,3 +34,10 @@ class RuleResponse(BaseModel):
 class RuleVersionResponse(BaseModel):
     version: int
     definition: RuleDefinition
+
+
+class RuleCompileRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=2_000)
+    cooldown_seconds: int = Field(default=3600, ge=0, le=31_536_000)
