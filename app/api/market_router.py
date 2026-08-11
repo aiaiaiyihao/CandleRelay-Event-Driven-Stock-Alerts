@@ -8,9 +8,9 @@ router = APIRouter(prefix="/market", tags=["market"])
 
 
 @router.get("/overview", response_model=MarketOverview)
-async def market_overview():
+async def market_overview(refresh: bool = Query(default=False)):
     try:
-        return await fetch_market_overview()
+        return await fetch_market_overview(force_refresh=refresh)
     except ValueError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 

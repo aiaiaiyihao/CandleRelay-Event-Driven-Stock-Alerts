@@ -1,6 +1,6 @@
-# CrandleRelay
+# [CandleRelay](https://github.com/aiaiaiyihao/CandleRelay-Event-Driven-Stock-Alerts)
 
-CrandleRelay is an event-driven stock alerting and strategy backtesting platform.
+CandleRelay is an event-driven stock alerting and strategy backtesting platform.
 Users describe market conditions in natural language, review the compiled and
 validated Rule DSL, and run the same rule against live Kafka events or historical
 market bars. A React dashboard turns this workflow into a focused, interactive
@@ -40,7 +40,7 @@ produce identical results. This behavior is covered by automated tests.
 - Adaptive 30-minute through maximum-history charts with SMA20, SMA50, and SMA200 overlays
 - Email or phone registration with password hashing and server-side sessions
 - User-owned Favorites with live price, daily change, and sorting
-- US market dashboard with major indexes and daily Top 10 movers
+- US market dashboard with major indexes and paginated Top 50 US-listed daily movers
 
 ## Example rule
 
@@ -85,7 +85,7 @@ docker compose -f docker/docker-compose.yml up -d
 
 This starts PostgreSQL, Redis, Kafka, the API, the live rule worker, and the
 React frontend. The API container applies Alembic migrations before serving
-traffic. CrandleRelay uses its own `crandleRelay_pgdata` volume so older local
+traffic. CandleRelay uses the existing `signalforge_pgdata` volume so older local
 PostgreSQL projects do not interfere with the demo credentials.
 
 Open:
@@ -231,14 +231,14 @@ coarser sampling for longer history:
 
 | UI label | API period | Display window | Sampling |
 | --- | --- | --- | --- |
-| 30 MIN | `30m` | 30 minutes | 5-minute points |
-| 60 MIN | `60m` | 60 minutes | 5-minute points |
-| 1D | `1d` | 1 trading day | 5-minute points |
-| 1W | `1wk` | 5 trading days | 30-minute points |
-| 1M | `1mo` | About 22 trading days | Hourly points |
+| 30 MIN | `30m` | 30 minutes | 1-minute points |
+| 60 MIN | `60m` | 60 minutes | 1-minute points |
+| 1D | `1d` | 1 trading day | 1-minute points |
+| 1W | `1wk` | 5 trading days | 10-minute points |
+| 1M | `1mo` | About 22 trading days | 4-hour points |
 | 3M | `3mo` | About 63 trading days | Daily points |
-| 1Y | `1y` | About 252 trading days | Weekly points |
-| 5Y | `5y` | About 1,260 trading days | Monthly points |
+| 1Y | `1y` | About 252 trading days | 2-day points |
+| 5Y | `5y` | About 1,260 trading days | Weekly points |
 | MAX | `max` | Full available history | Monthly points |
 
 SMA20, SMA50, and SMA200 are calculated with pre-window warmup data. This lets
@@ -256,8 +256,13 @@ POST   /favorites
 DELETE /favorites/{symbol}
 ```
 
-The overview batches a curated US large-cap universe to calculate the daily
-Top 10 gainers and losers without requiring a paid market-screener feed.
+The overview screens equities listed on Nasdaq, NYSE, and NYSE American, while
+excluding OTC securities and filtering for a $1+ share price and at least
+100,000 shares of daily volume. It recomputes each daily change from the current
+regular-market price and previous close. Results expose the market state and
+update time and are cached briefly to avoid redundant calls. Gainers and losers
+each return 50 ranked stocks for independent 10-row pagination, while
+`GET /market/overview?refresh=true` bypasses the cache for a manual refresh.
 Favorites are keyed by authenticated user and symbol, so accounts never share
 saved stocks.
 

@@ -1,6 +1,8 @@
 import yfinance as yf
-from datetime import datetime
+import pandas as pd
+from datetime import datetime, timezone
 import asyncio
+import time
 
 
 CHART_RANGES = {"1mo", "3mo", "6mo", "1y"}
@@ -12,15 +14,15 @@ CHART_INTERVALS = {
     "1mo": {"history_period": "max", "points": {"1mo": 1, "3mo": 3, "6mo": 6, "1y": 12}},
 }
 CHART_PRESETS = {
-    "30m": {"history_period": "5d", "interval": "5m", "points": 6},
-    "60m": {"history_period": "5d", "interval": "5m", "points": 12},
-    "1d": {"history_period": "5d", "interval": "5m", "points": 78},
-    "1wk": {"history_period": "60d", "interval": "30m", "points": 65},
-    "1mo": {"history_period": "60d", "interval": "60m", "points": 154},
-    "3mo": {"history_period": "2y", "interval": "1d", "points": 66},
-    "1y": {"history_period": "5y", "interval": "1wk", "points": 52},
-    "5y": {"history_period": "max", "interval": "1mo", "points": 60},
-    "max": {"history_period": "max", "interval": "1mo", "points": None},
+    "30m": {"history_period": "5d", "source_interval": "1m", "interval": "1m", "points": 30},
+    "60m": {"history_period": "5d", "source_interval": "1m", "interval": "1m", "points": 60},
+    "1d": {"history_period": "5d", "source_interval": "1m", "interval": "1m", "points": 390},
+    "1wk": {"history_period": "60d", "source_interval": "5m", "interval": "10m", "aggregate": "10min", "points": 195},
+    "1mo": {"history_period": "730d", "source_interval": "60m", "interval": "4h", "aggregate": "4h", "points": 44},
+    "3mo": {"history_period": "2y", "source_interval": "1d", "interval": "1d", "points": 66},
+    "1y": {"history_period": "5y", "source_interval": "1d", "interval": "2d", "aggregate_rows": 2, "points": 126},
+    "5y": {"history_period": "max", "source_interval": "1wk", "interval": "1wk", "points": 260},
+    "max": {"history_period": "max", "source_interval": "1mo", "interval": "1mo", "points": None},
 }
 MARKET_INDEXES = {
     "^GSPC": "S&P 500",
@@ -28,12 +30,8 @@ MARKET_INDEXES = {
     "^DJI": "Dow Jones",
     "^RUT": "Russell 2000",
 }
-LARGE_CAP_UNIVERSE = (
-    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "BRK-B", "JPM",
-    "LLY", "V", "WMT", "XOM", "MA", "COST", "ORCL", "NFLX", "HD", "PG",
-    "JNJ", "ABBV", "BAC", "KO", "CRM", "AMD", "PEP", "TMO", "CSCO", "ACN",
-    "MCD", "IBM", "GE", "CAT", "GS", "AXP", "UBER", "DIS", "QCOM", "INTC",
-)
+MARKET_OVERVIEW_CACHE_SECONDS = 60
+_market_overview_cache: tuple[float, dict] | None = None
 
 #call remote api to fetch price
 async def fetch_price_yfinance(symbol: str):
@@ -123,7 +121,7 @@ async def fetch_chart_preset_yfinance(symbol: str, period: str) -> dict:
     def load_history():
         return yf.Ticker(symbol).history(
             period=config["history_period"],
-            interval=config["interval"],
+            interval=config["source_interval"],
             auto_adjust=False,
         )
 
@@ -134,6 +132,11 @@ async def fetch_chart_preset_yfinance(symbol: str, period: str) -> dict:
     if history.empty:
         raise ValueError(f"No chart data found for symbol: {symbol}")
 
+    history = aggregate_chart_history(
+        history,
+        frequency=config.get("aggregate"),
+        rows=config.get("aggregate_rows"),
+    )
     points = build_chart_points(history)
     if config["points"] is not None:
         points = points[-config["points"]:]
@@ -143,6 +146,42 @@ async def fetch_chart_preset_yfinance(symbol: str, period: str) -> dict:
         "interval": config["interval"],
         "points": points,
     }
+
+
+def aggregate_chart_history(history, frequency: str | None = None, rows: int | None = None):
+    aggregations = {
+        "Open": "first",
+        "High": "max",
+        "Low": "min",
+        "Close": "last",
+        "Volume": "sum",
+    }
+    if frequency:
+        offset = "9h30min" if frequency in {"10min", "4h"} else None
+        return (
+            history.resample(frequency, origin="start_day", offset=offset)
+            .agg(aggregations)
+            .dropna(subset=["Close"])
+        )
+    if rows:
+        records = []
+        timestamps = []
+        for start in range(0, len(history), rows):
+            chunk = history.iloc[start:start + rows]
+            if chunk.empty:
+                continue
+            records.append(
+                {
+                    "Open": chunk["Open"].iloc[0],
+                    "High": chunk["High"].max(),
+                    "Low": chunk["Low"].min(),
+                    "Close": chunk["Close"].iloc[-1],
+                    "Volume": chunk["Volume"].sum(),
+                }
+            )
+            timestamps.append(chunk.index[-1])
+        return pd.DataFrame(records, index=pd.DatetimeIndex(timestamps))
+    return history
 
 
 def build_chart_points(history) -> list[dict]:
@@ -180,17 +219,81 @@ def moving_average(values: list[float], period: int) -> list[float | None]:
     return result
 
 
-async def fetch_market_overview() -> dict:
-    symbols = [*MARKET_INDEXES, *LARGE_CAP_UNIVERSE]
+async def fetch_market_overview(force_refresh: bool = False) -> dict:
+    global _market_overview_cache
+    now = time.monotonic()
+    if not force_refresh and _market_overview_cache and now - _market_overview_cache[0] < MARKET_OVERVIEW_CACHE_SECONDS:
+        return _market_overview_cache[1]
 
-    snapshots = await fetch_market_snapshots(symbols)
-    indexes = [item for item in snapshots if item["symbol"] in MARKET_INDEXES]
-    stocks = [item for item in snapshots if item["symbol"] not in MARKET_INDEXES]
-    return {
+    indexes, movers = await asyncio.gather(
+        fetch_market_snapshots(list(MARKET_INDEXES)),
+        fetch_market_movers(),
+    )
+    overview = {
         "indexes": indexes,
-        "gainers": sorted(stocks, key=lambda item: item["change_percent"], reverse=True)[:10],
-        "losers": sorted(stocks, key=lambda item: item["change_percent"])[:10],
+        "gainers": movers["gainers"],
+        "losers": movers["losers"],
+        "scope": "Active US-listed stocks (Nasdaq, NYSE, NYSE American; price $1+, volume 100K+)",
+        "market_state": movers["market_state"],
+        "updated_at": movers["updated_at"],
     }
+    _market_overview_cache = (now, overview)
+    return overview
+
+
+async def fetch_market_movers() -> dict:
+    def load_screens():
+        query = yf.EquityQuery(
+            "and",
+            [
+                yf.EquityQuery("eq", ["region", "us"]),
+                yf.EquityQuery("is-in", ["exchange", "NMS", "NGM", "NCM", "NYQ", "ASE"]),
+                yf.EquityQuery("gte", ["intradayprice", 1]),
+                yf.EquityQuery("gte", ["dayvolume", 100_000]),
+            ],
+        )
+        return (
+            yf.screen(query, size=50, sortField="percentchange", sortAsc=False),
+            yf.screen(query, size=50, sortField="percentchange", sortAsc=True),
+        )
+
+    try:
+        gainers_screen, losers_screen = await asyncio.to_thread(load_screens)
+    except Exception as exc:
+        raise ValueError(f"yfinance market screener error: {exc}") from exc
+
+    gainers = build_screener_snapshots(gainers_screen.get("quotes", []), descending=True)
+    losers = build_screener_snapshots(losers_screen.get("quotes", []), descending=False)
+    quotes = [*gainers_screen.get("quotes", []), *losers_screen.get("quotes", [])]
+    timestamps = [quote.get("regularMarketTime") for quote in quotes if quote.get("regularMarketTime")]
+    return {
+        "gainers": gainers[:50],
+        "losers": losers[:50],
+        "market_state": "OPEN" if any(quote.get("marketState") == "REGULAR" for quote in quotes) else "CLOSED",
+        "updated_at": datetime.fromtimestamp(max(timestamps), tz=timezone.utc) if timestamps else datetime.now(timezone.utc),
+    }
+
+
+def build_screener_snapshots(quotes: list[dict], descending: bool) -> list[dict]:
+    snapshots = []
+    for quote in quotes:
+        price = quote.get("regularMarketPrice")
+        previous = quote.get("regularMarketPreviousClose")
+        symbol = quote.get("symbol")
+        if not symbol or price is None or not previous:
+            continue
+        change = float(price) - float(previous)
+        snapshots.append(
+            {
+                "symbol": symbol,
+                "name": quote.get("longName") or quote.get("shortName") or symbol,
+                "price": float(price),
+                "change": change,
+                "change_percent": (change / float(previous)) * 100,
+                "sparkline": [float(previous), float(price)],
+            }
+        )
+    return sorted(snapshots, key=lambda item: item["change_percent"], reverse=descending)
 
 
 async def fetch_market_snapshots(symbols: list[str]) -> list[dict]:

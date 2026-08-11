@@ -25,7 +25,7 @@ export const api = {
     body: JSON.stringify({ identifier, password }),
   }),
   logout: () => request('/auth/logout', { method: 'POST' }),
-  marketOverview: () => request('/market/overview'),
+  marketOverview: (refresh = false) => request(`/market/overview${refresh ? '?refresh=true' : ''}`),
   marketQuotes: (symbols) => request(`/market/quotes?symbols=${encodeURIComponent(symbols.join(','))}`),
   favorites: () => request('/favorites'),
   addFavorite: (symbol) => request('/favorites', {

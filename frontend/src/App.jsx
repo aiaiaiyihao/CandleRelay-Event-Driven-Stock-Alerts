@@ -71,15 +71,58 @@ function Condition({ item, index }) {
 
 const CHART_PERIODS = [['30m', '30 MIN'], ['60m', '60 MIN'], ['1d', '1D'], ['1wk', '1W'], ['1mo', '1M'], ['3mo', '3M'], ['1y', '1Y'], ['5y', '5Y'], ['max', 'MAX']]
 const CHART_PERIOD_INFO = {
-  '30m': '30 minutes · 5-minute points',
-  '60m': '60 minutes · 5-minute points',
-  '1d': '1 trading day · 5-minute points',
-  '1wk': '5 trading days · 30-minute points',
-  '1mo': 'about 22 trading days · hourly points',
+  '30m': '30 minutes · 1-minute points',
+  '60m': '60 minutes · 1-minute points',
+  '1d': '1 trading day · 1-minute points',
+  '1wk': '5 trading days · 10-minute points',
+  '1mo': 'about 22 trading days · 4-hour points',
   '3mo': 'about 63 trading days · daily points',
-  '1y': 'about 252 trading days · weekly points',
-  '5y': 'about 1,260 trading days · monthly points',
+  '1y': 'about 252 trading days · 2-day points',
+  '5y': 'about 1,260 trading days · weekly points',
   max: 'full available history · monthly points',
+}
+
+const INTRADAY_INTERVALS = new Set(['1m', '5m', '10m', '30m', '60m', '4h'])
+
+function formatChartTimestamp(timestamp, interval, full = false) {
+  const value = new Date(timestamp)
+  if (INTRADAY_INTERVALS.has(interval)) {
+    return value.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: full ? 'numeric' : undefined,
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: full ? 'short' : undefined,
+    })
+  }
+  if (interval === '1mo') {
+    return value.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+  }
+  return value.toLocaleDateString('en-US', {
+    month: full ? 'long' : 'short',
+    day: 'numeric',
+    year: full ? 'numeric' : undefined,
+  })
+}
+
+function ChartTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  return <div className="chart-tooltip"><span>{payload[0].payload.tooltipDate || label}</span>{payload.map((item) => <div key={item.dataKey}><i style={{ background: item.color }} />{item.name}<strong>${Number(item.value).toFixed(2)}</strong></div>)}</div>
+}
+
+function MoverList({ title, items, tone, page, setPage, selectedSymbol, selectSymbol, tracked, trackSymbol, untrackSymbol }) {
+  const pageSize = 10
+  const pageCount = Math.max(1, Math.ceil(items.length / pageSize))
+  const safePage = Math.min(page, pageCount - 1)
+  const visibleItems = items.slice(safePage * pageSize, (safePage + 1) * pageSize)
+  return (
+    <div className="mover-list">
+      <h3>{title}<span>TOP 50 · 10 / PAGE</span></h3>
+      {visibleItems.map((item, index) => <div className={`mover-row ${selectedSymbol === item.symbol ? 'selected' : ''}`} key={item.symbol} onClick={() => selectSymbol(item.symbol)} role="button" tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && selectSymbol(item.symbol)}><span>{String((safePage * pageSize) + index + 1).padStart(2, '0')}</span><strong>{item.symbol}</strong><em>${item.price.toFixed(2)}</em><b className={tone}>{item.change_percent >= 0 ? '+' : ''}{item.change_percent.toFixed(2)}%</b><button className={tracked.some((favorite) => favorite.symbol === item.symbol) ? 'star active' : 'star'} onClick={(event) => { event.stopPropagation(); tracked.some((favorite) => favorite.symbol === item.symbol) ? untrackSymbol(item.symbol) : trackSymbol(item.symbol) }} aria-label={`Toggle ${item.symbol} favorite`}>★</button></div>)}
+      <div className="mover-pagination"><button disabled={safePage === 0} onClick={() => setPage(safePage - 1)} aria-label={`Previous ${title.toLowerCase()} page`}>←</button><span>{safePage + 1} / {pageCount}</span><button disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)} aria-label={`Next ${title.toLowerCase()} page`}>→</button></div>
+    </div>
+  )
 }
 
 function MarketChart({ symbol, displayName, period, setPeriod, data, message, averages, setAverages, compact = false }) {
@@ -103,7 +146,7 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
           <CartesianGrid stroke="#252728" vertical={false} />
           <XAxis dataKey="date" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} minTickGap={34} />
           <YAxis domain={['auto', 'auto']} orientation="right" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} width={52} tickFormatter={(value) => `$${Number(value).toFixed(0)}`} />
-          <Tooltip content={({ active, payload, label }) => active && payload?.length ? <div className="chart-tooltip"><span>{label}</span>{payload.map((item) => <div key={item.dataKey}><i style={{ background: item.color }} />{item.name}<strong>${Number(item.value).toFixed(2)}</strong></div>)}</div> : null} />
+          <Tooltip content={<ChartTooltip />} />
           <Area type="monotone" dataKey="close" name="Price" stroke="#e9e7e1" strokeWidth={2} fill={`url(#${compact ? 'dashboardPriceFill' : 'favoritePriceFill'})`} dot={false} />
           {averages.sma_20 && <Line type="monotone" dataKey="sma_20" name="SMA 20" stroke="#e76d2d" strokeWidth={1.5} dot={false} />}
           {averages.sma_50 && <Line type="monotone" dataKey="sma_50" name="SMA 50" stroke="#5fd398" strokeWidth={1.4} dot={false} />}
@@ -132,7 +175,8 @@ function App() {
   const [backtest, setBacktest] = useState(SAMPLE_BACKTEST)
   const [alerts, setAlerts] = useState([])
   const [tracked, setTracked] = useState([])
-  const [market, setMarket] = useState({ indexes: [], gainers: [], losers: [] })
+  const [market, setMarket] = useState({ indexes: [], gainers: [], losers: [], scope: 'Active US-listed stocks', market_state: 'CLOSED', updated_at: null })
+  const [moverPages, setMoverPages] = useState({ gainers: 0, losers: 0 })
   const [favoriteQuotes, setFavoriteQuotes] = useState([])
   const [favoriteSort, setFavoriteSort] = useState('change_desc')
   const [search, setSearch] = useState('NVDA')
@@ -184,9 +228,8 @@ function App() {
         if (!active) return
         setChartData(result.points.map((point) => ({
           ...point,
-          date: ['5m', '30m', '60m'].includes(result.interval)
-            ? new Date(point.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-            : new Date(point.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          date: formatChartTimestamp(point.timestamp, result.interval),
+          tooltipDate: formatChartTimestamp(point.timestamp, result.interval, true),
         })))
         setChartMessage('')
       })
@@ -227,6 +270,16 @@ function App() {
     if (favoriteSort === 'price_desc') return (rightMarket?.price || 0) - (leftMarket?.price || 0)
     return (rightMarket?.change_percent ?? -Infinity) - (leftMarket?.change_percent ?? -Infinity)
   }), [tracked, marketBySymbol, favoriteSort])
+
+  async function refreshMarket() {
+    setBusy('market-refresh')
+    try {
+      setMarket(await api.marketOverview(true))
+      setMoverPages({ gainers: 0, losers: 0 })
+    } finally {
+      setBusy('')
+    }
+  }
 
   function navigate(nextPage) {
     window.history.pushState({}, '', `/${nextPage}`)
@@ -378,9 +431,9 @@ function App() {
   return (
     <main>
       <header className="topbar">
-        <a className="brand" href="/dashboard" onClick={(event) => { event.preventDefault(); navigate('dashboard') }} aria-label="SignalForge home">
-          <span className="brand-mark">SF</span>
-          <span>SignalForge</span>
+        <a className="brand" href="https://github.com/aiaiaiyihao/CandleRelay-Event-Driven-Stock-Alerts" target="_blank" rel="noreferrer" aria-label="CandleRelay on GitHub">
+          <span className="brand-mark">CR</span>
+          <span>CandleRelay</span>
         </a>
         <nav className="product-nav" aria-label="Product navigation">
           {[['dashboard', 'Dashboard'], ['favorites', 'My Favorites'], ['rule-studio', 'Rule Studio']].map(([route, label]) => <a className={page === route ? 'active' : ''} href={`/${route}`} key={route} onClick={(event) => { event.preventDefault(); navigate(route) }}>{label}</a>)}
@@ -398,7 +451,7 @@ function App() {
         <div className="auth-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setAuthOpen(false)}>
           <section className="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-title">
             <button className="auth-close" onClick={() => setAuthOpen(false)} aria-label="Close account dialog">×</button>
-            <p className="eyebrow">PERSONAL SIGNALFORGE ACCOUNT</p>
+            <p className="eyebrow">PERSONAL CANDLERELAY ACCOUNT</p>
             <h2 id="auth-title">{authMode === 'login' ? 'Welcome back.' : 'Create your account.'}</h2>
             <p className="auth-copy">Use an email address or phone number to keep your market workspace personal.</p>
             <div className="auth-tabs">
@@ -425,14 +478,15 @@ function App() {
       </section>}
 
       {page === 'dashboard' && <section className="dashboard-section page-surface" id="dashboard">
-        <div className="section-intro"><div><p className="eyebrow">US MARKET COMMAND CENTER</p><h2>Market dashboard</h2></div><p>Major indexes and today's leading large-cap movers. Select any market to inspect its trend.</p></div>
+        <div className="section-intro"><div><p className="eyebrow">US MARKET COMMAND CENTER</p><h2>Market dashboard</h2></div><div className="market-status"><p>Major indexes and today's leading active US-listed stocks. Select any market to inspect its trend.</p><div><span className={market.market_state === 'OPEN' ? 'open' : ''}>{market.market_state === 'OPEN' ? 'MARKET OPEN' : 'MARKET CLOSED'}{market.updated_at ? ` · UPDATED ${new Date(market.updated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</span><button onClick={refreshMarket} disabled={busy === 'market-refresh'}>{busy === 'market-refresh' ? 'REFRESHING…' : '↻ REFRESH'}</button></div></div></div>
         <div className="index-strip">
           {market.indexes.map((item) => <button key={item.symbol} className={selectedSymbol === item.symbol ? 'selected' : ''} onClick={() => selectMarketSymbol(item.symbol)}><span>{item.name}</span><strong>{item.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong><em className={item.change_percent >= 0 ? 'up' : 'down'}>{item.change_percent >= 0 ? '+' : ''}{item.change_percent.toFixed(2)}%</em></button>)}
         </div>
         <div className="dashboard-grid">
           <div className="mover-panel panel">
             <div className="mover-columns">
-              {[['TOP GAINERS', market.gainers, 'up'], ['TOP LOSERS', market.losers, 'down']].map(([title, items, tone]) => <div className="mover-list" key={title}><h3>{title}<span>TOP 10</span></h3>{items.map((item, index) => <div className={`mover-row ${selectedSymbol === item.symbol ? 'selected' : ''}`} key={item.symbol} onClick={() => selectMarketSymbol(item.symbol)} role="button" tabIndex={0}><span>{String(index + 1).padStart(2, '0')}</span><strong>{item.symbol}</strong><em>${item.price.toFixed(2)}</em><b className={tone}>{item.change_percent >= 0 ? '+' : ''}{item.change_percent.toFixed(2)}%</b><button className={tracked.some((favorite) => favorite.symbol === item.symbol) ? 'star active' : 'star'} onClick={(event) => { event.stopPropagation(); tracked.some((favorite) => favorite.symbol === item.symbol) ? untrackSymbol(item.symbol) : trackSymbol(item.symbol) }} aria-label={`Toggle ${item.symbol} favorite`}>★</button></div>)}</div>)}
+              <MoverList title="TOP GAINERS" items={market.gainers} tone="up" page={moverPages.gainers} setPage={(nextPage) => setMoverPages((pages) => ({ ...pages, gainers: nextPage }))} selectedSymbol={selectedSymbol} selectSymbol={selectMarketSymbol} tracked={tracked} trackSymbol={trackSymbol} untrackSymbol={untrackSymbol} />
+              <MoverList title="TOP LOSERS" items={market.losers} tone="down" page={moverPages.losers} setPage={(nextPage) => setMoverPages((pages) => ({ ...pages, losers: nextPage }))} selectedSymbol={selectedSymbol} selectSymbol={selectMarketSymbol} tracked={tracked} trackSymbol={trackSymbol} untrackSymbol={untrackSymbol} />
             </div>
           </div>
           <MarketChart symbol={selectedSymbol} displayName={marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
@@ -539,7 +593,7 @@ function App() {
                 <CartesianGrid stroke="#252728" vertical={false} />
                 <XAxis dataKey="date" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} minTickGap={34} />
                 <YAxis domain={['auto', 'auto']} orientation="right" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} width={52} tickFormatter={(value) => `$${Number(value).toFixed(0)}`} />
-                <Tooltip content={({ active, payload, label }) => active && payload?.length ? <div className="chart-tooltip"><span>{label}</span>{payload.map((item) => <div key={item.dataKey}><i style={{ background: item.color }} />{item.name}<strong>${Number(item.value).toFixed(2)}</strong></div>)}</div> : null} />
+                <Tooltip content={<ChartTooltip />} />
                 <Area type="monotone" dataKey="close" name="Price" stroke="#e9e7e1" strokeWidth={2} fill="url(#priceFill)" dot={false} activeDot={{ r: 4, fill: '#e76d2d', stroke: '#0d0f10', strokeWidth: 2 }} />
                 {visibleAverages.sma_20 && <Line type="monotone" dataKey="sma_20" name="SMA 20" stroke="#e76d2d" strokeWidth={1.5} dot={false} connectNulls={false} />}
                 {visibleAverages.sma_50 && <Line type="monotone" dataKey="sma_50" name="SMA 50" stroke="#5fd398" strokeWidth={1.4} dot={false} connectNulls={false} />}
@@ -625,7 +679,7 @@ function App() {
       </section>
       </>}
 
-      <footer><span>SignalForge / Engine v1.0</span><span>Same rule. Live and replay.</span><span>FastAPI / Kafka / PostgreSQL</span></footer>
+      <footer><span>CandleRelay / Engine v1.0</span><span>Same rule. Live and replay.</span><span>FastAPI / Kafka / PostgreSQL</span></footer>
     </main>
   )
 }
