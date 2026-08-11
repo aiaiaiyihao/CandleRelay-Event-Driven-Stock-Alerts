@@ -219,10 +219,10 @@ def moving_average(values: list[float], period: int) -> list[float | None]:
     return result
 
 
-async def fetch_market_overview() -> dict:
+async def fetch_market_overview(force_refresh: bool = False) -> dict:
     global _market_overview_cache
     now = time.monotonic()
-    if _market_overview_cache and now - _market_overview_cache[0] < MARKET_OVERVIEW_CACHE_SECONDS:
+    if not force_refresh and _market_overview_cache and now - _market_overview_cache[0] < MARKET_OVERVIEW_CACHE_SECONDS:
         return _market_overview_cache[1]
 
     indexes, movers = await asyncio.gather(
@@ -253,8 +253,8 @@ async def fetch_market_movers() -> dict:
             ],
         )
         return (
-            yf.screen(query, size=10, sortField="percentchange", sortAsc=False),
-            yf.screen(query, size=10, sortField="percentchange", sortAsc=True),
+            yf.screen(query, size=50, sortField="percentchange", sortAsc=False),
+            yf.screen(query, size=50, sortField="percentchange", sortAsc=True),
         )
 
     try:
@@ -267,8 +267,8 @@ async def fetch_market_movers() -> dict:
     quotes = [*gainers_screen.get("quotes", []), *losers_screen.get("quotes", [])]
     timestamps = [quote.get("regularMarketTime") for quote in quotes if quote.get("regularMarketTime")]
     return {
-        "gainers": gainers[:10],
-        "losers": losers[:10],
+        "gainers": gainers[:50],
+        "losers": losers[:50],
         "market_state": "OPEN" if any(quote.get("marketState") == "REGULAR" for quote in quotes) else "CLOSED",
         "updated_at": datetime.fromtimestamp(max(timestamps), tz=timezone.utc) if timestamps else datetime.now(timezone.utc),
     }

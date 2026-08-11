@@ -40,7 +40,7 @@ produce identical results. This behavior is covered by automated tests.
 - Adaptive 30-minute through maximum-history charts with SMA20, SMA50, and SMA200 overlays
 - Email or phone registration with password hashing and server-side sessions
 - User-owned Favorites with live price, daily change, and sorting
-- US market dashboard with major indexes and active US-listed daily Top 10 movers
+- US market dashboard with major indexes and paginated Top 50 US-listed daily movers
 
 ## Example rule
 
@@ -260,7 +260,9 @@ The overview screens equities listed on Nasdaq, NYSE, and NYSE American, while
 excluding OTC securities and filtering for a $1+ share price and at least
 100,000 shares of daily volume. It recomputes each daily change from the current
 regular-market price and previous close. Results expose the market state and
-update time and are cached briefly to avoid redundant calls.
+update time and are cached briefly to avoid redundant calls. Gainers and losers
+each return 50 ranked stocks for independent 10-row pagination, while
+`GET /market/overview?refresh=true` bypasses the cache for a manual refresh.
 Favorites are keyed by authenticated user and symbol, so accounts never share
 saved stocks.
 

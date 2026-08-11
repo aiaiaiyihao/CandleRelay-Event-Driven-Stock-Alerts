@@ -111,6 +111,20 @@ function ChartTooltip({ active, payload, label }) {
   return <div className="chart-tooltip"><span>{payload[0].payload.tooltipDate || label}</span>{payload.map((item) => <div key={item.dataKey}><i style={{ background: item.color }} />{item.name}<strong>${Number(item.value).toFixed(2)}</strong></div>)}</div>
 }
 
+function MoverList({ title, items, tone, page, setPage, selectedSymbol, selectSymbol, tracked, trackSymbol, untrackSymbol }) {
+  const pageSize = 10
+  const pageCount = Math.max(1, Math.ceil(items.length / pageSize))
+  const safePage = Math.min(page, pageCount - 1)
+  const visibleItems = items.slice(safePage * pageSize, (safePage + 1) * pageSize)
+  return (
+    <div className="mover-list">
+      <h3>{title}<span>TOP 50 · 10 / PAGE</span></h3>
+      {visibleItems.map((item, index) => <div className={`mover-row ${selectedSymbol === item.symbol ? 'selected' : ''}`} key={item.symbol} onClick={() => selectSymbol(item.symbol)} role="button" tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && selectSymbol(item.symbol)}><span>{String((safePage * pageSize) + index + 1).padStart(2, '0')}</span><strong>{item.symbol}</strong><em>${item.price.toFixed(2)}</em><b className={tone}>{item.change_percent >= 0 ? '+' : ''}{item.change_percent.toFixed(2)}%</b><button className={tracked.some((favorite) => favorite.symbol === item.symbol) ? 'star active' : 'star'} onClick={(event) => { event.stopPropagation(); tracked.some((favorite) => favorite.symbol === item.symbol) ? untrackSymbol(item.symbol) : trackSymbol(item.symbol) }} aria-label={`Toggle ${item.symbol} favorite`}>★</button></div>)}
+      <div className="mover-pagination"><button disabled={safePage === 0} onClick={() => setPage(safePage - 1)} aria-label={`Previous ${title.toLowerCase()} page`}>←</button><span>{safePage + 1} / {pageCount}</span><button disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)} aria-label={`Next ${title.toLowerCase()} page`}>→</button></div>
+    </div>
+  )
+}
+
 function MarketChart({ symbol, displayName, period, setPeriod, data, message, averages, setAverages, compact = false }) {
   return (
     <section className={`stock-chart-panel panel ${compact ? 'compact-chart' : ''}`} id={compact ? 'dashboard-chart' : 'stock-chart'}>
@@ -162,6 +176,7 @@ function App() {
   const [alerts, setAlerts] = useState([])
   const [tracked, setTracked] = useState([])
   const [market, setMarket] = useState({ indexes: [], gainers: [], losers: [], scope: 'Active US-listed stocks', market_state: 'CLOSED', updated_at: null })
+  const [moverPages, setMoverPages] = useState({ gainers: 0, losers: 0 })
   const [favoriteQuotes, setFavoriteQuotes] = useState([])
   const [favoriteSort, setFavoriteSort] = useState('change_desc')
   const [search, setSearch] = useState('NVDA')
@@ -255,6 +270,16 @@ function App() {
     if (favoriteSort === 'price_desc') return (rightMarket?.price || 0) - (leftMarket?.price || 0)
     return (rightMarket?.change_percent ?? -Infinity) - (leftMarket?.change_percent ?? -Infinity)
   }), [tracked, marketBySymbol, favoriteSort])
+
+  async function refreshMarket() {
+    setBusy('market-refresh')
+    try {
+      setMarket(await api.marketOverview(true))
+      setMoverPages({ gainers: 0, losers: 0 })
+    } finally {
+      setBusy('')
+    }
+  }
 
   function navigate(nextPage) {
     window.history.pushState({}, '', `/${nextPage}`)
@@ -453,14 +478,15 @@ function App() {
       </section>}
 
       {page === 'dashboard' && <section className="dashboard-section page-surface" id="dashboard">
-        <div className="section-intro"><div><p className="eyebrow">US MARKET COMMAND CENTER</p><h2>Market dashboard</h2></div><div className="market-status"><p>Major indexes and today's leading active US-listed stocks. Select any market to inspect its trend.</p><span className={market.market_state === 'OPEN' ? 'open' : ''}>{market.market_state === 'OPEN' ? 'MARKET OPEN' : 'MARKET CLOSED'}{market.updated_at ? ` · UPDATED ${new Date(market.updated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</span></div></div>
+        <div className="section-intro"><div><p className="eyebrow">US MARKET COMMAND CENTER</p><h2>Market dashboard</h2></div><div className="market-status"><p>Major indexes and today's leading active US-listed stocks. Select any market to inspect its trend.</p><div><span className={market.market_state === 'OPEN' ? 'open' : ''}>{market.market_state === 'OPEN' ? 'MARKET OPEN' : 'MARKET CLOSED'}{market.updated_at ? ` · UPDATED ${new Date(market.updated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</span><button onClick={refreshMarket} disabled={busy === 'market-refresh'}>{busy === 'market-refresh' ? 'REFRESHING…' : '↻ REFRESH'}</button></div></div></div>
         <div className="index-strip">
           {market.indexes.map((item) => <button key={item.symbol} className={selectedSymbol === item.symbol ? 'selected' : ''} onClick={() => selectMarketSymbol(item.symbol)}><span>{item.name}</span><strong>{item.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong><em className={item.change_percent >= 0 ? 'up' : 'down'}>{item.change_percent >= 0 ? '+' : ''}{item.change_percent.toFixed(2)}%</em></button>)}
         </div>
         <div className="dashboard-grid">
           <div className="mover-panel panel">
             <div className="mover-columns">
-              {[['TOP GAINERS', market.gainers, 'up'], ['TOP LOSERS', market.losers, 'down']].map(([title, items, tone]) => <div className="mover-list" key={title}><h3>{title}<span>US LISTED · $1+ · VOL 100K+</span></h3>{items.map((item, index) => <div className={`mover-row ${selectedSymbol === item.symbol ? 'selected' : ''}`} key={item.symbol} onClick={() => selectMarketSymbol(item.symbol)} role="button" tabIndex={0}><span>{String(index + 1).padStart(2, '0')}</span><strong>{item.symbol}</strong><em>${item.price.toFixed(2)}</em><b className={tone}>{item.change_percent >= 0 ? '+' : ''}{item.change_percent.toFixed(2)}%</b><button className={tracked.some((favorite) => favorite.symbol === item.symbol) ? 'star active' : 'star'} onClick={(event) => { event.stopPropagation(); tracked.some((favorite) => favorite.symbol === item.symbol) ? untrackSymbol(item.symbol) : trackSymbol(item.symbol) }} aria-label={`Toggle ${item.symbol} favorite`}>★</button></div>)}</div>)}
+              <MoverList title="TOP GAINERS" items={market.gainers} tone="up" page={moverPages.gainers} setPage={(nextPage) => setMoverPages((pages) => ({ ...pages, gainers: nextPage }))} selectedSymbol={selectedSymbol} selectSymbol={selectMarketSymbol} tracked={tracked} trackSymbol={trackSymbol} untrackSymbol={untrackSymbol} />
+              <MoverList title="TOP LOSERS" items={market.losers} tone="down" page={moverPages.losers} setPage={(nextPage) => setMoverPages((pages) => ({ ...pages, losers: nextPage }))} selectedSymbol={selectedSymbol} selectSymbol={selectMarketSymbol} tracked={tracked} trackSymbol={trackSymbol} untrackSymbol={untrackSymbol} />
             </div>
           </div>
           <MarketChart symbol={selectedSymbol} displayName={marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
