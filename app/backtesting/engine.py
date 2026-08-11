@@ -2,9 +2,10 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from app.domain.events import MarketEvent
-from app.domain.rules import IndicatorOperand, RuleDefinition
+from app.domain.rules import RuleDefinition
 from app.indicators.engine import IndicatorEngine
 from app.rules.evaluator import RuleEvaluation, RuleEvaluator
+from app.rules.requirements import required_indicator_periods
 
 
 @dataclass(frozen=True)
@@ -30,7 +31,7 @@ class BacktestEngine:
         ordered_events = sorted(events, key=lambda event: event.timestamp)
         indicator_engine = IndicatorEngine()
         rule_evaluator = RuleEvaluator()
-        periods = self._indicator_periods(rule)
+        periods = required_indicator_periods(rule)
         evaluations = []
 
         for event in ordered_events:
@@ -44,14 +45,4 @@ class BacktestEngine:
             bars_processed=len(ordered_events),
             evaluations=tuple(evaluations),
         )
-
-    @staticmethod
-    def _indicator_periods(rule: RuleDefinition) -> set[int]:
-        conditions = rule.conditions.all or rule.conditions.any or []
-        return {
-            operand.period
-            for condition in conditions
-            for operand in (condition.left, condition.right)
-            if isinstance(operand, IndicatorOperand)
-        }
 
