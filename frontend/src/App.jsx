@@ -66,11 +66,16 @@ function App() {
   const [ruleId, setRuleId] = useState('')
   const [backtest, setBacktest] = useState(SAMPLE_BACKTEST)
   const [alerts, setAlerts] = useState([])
+  const [tracked, setTracked] = useState([])
+  const [search, setSearch] = useState('NVDA')
+  const [quote, setQuote] = useState(null)
+  const [searchMessage, setSearchMessage] = useState('Enter an exact ticker symbol')
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('Ready to compile')
 
   useEffect(() => {
     api.alerts().then(setAlerts).catch(() => {})
+    api.watchlist().then(setTracked).catch(() => {})
   }, [])
 
   const returns = useMemo(() => backtest?.result_summary?.average_forward_returns || {}, [backtest])
@@ -120,6 +125,51 @@ function App() {
     }
   }
 
+  async function searchStock(event) {
+    event.preventDefault()
+    const symbol = search.trim().toUpperCase()
+    if (!symbol) return
+    setBusy('search')
+    setQuote(null)
+    setSearchMessage(`Looking up ${symbol}…`)
+    try {
+      const result = await api.quote(symbol)
+      setQuote(result)
+      setSearch(result.symbol)
+      setSearchMessage('Latest quote from yfinance')
+    } catch (error) {
+      setSearchMessage(error.message)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function trackSymbol(symbol) {
+    setBusy(`track-${symbol}`)
+    try {
+      const item = await api.track(symbol)
+      setTracked((items) => items.some((entry) => entry.symbol === item.symbol) ? items : [...items, item])
+      setSearchMessage(`${item.symbol} added to tracked symbols`)
+    } catch (error) {
+      setSearchMessage(error.message)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function untrackSymbol(symbol) {
+    setBusy(`track-${symbol}`)
+    try {
+      await api.untrack(symbol)
+      setTracked((items) => items.filter((item) => item.symbol !== symbol))
+      setSearchMessage(`${symbol} removed from tracked symbols`)
+    } catch (error) {
+      setSearchMessage(error.message)
+    } finally {
+      setBusy('')
+    }
+  }
+
   return (
     <main>
       <header className="topbar">
@@ -137,6 +187,59 @@ function App() {
           <h1>Forge market noise<br />into <span>precise signals.</span></h1>
         </div>
         <p className="hero-copy">One validated rule engine for historical replay and live Kafka events. Explainable by design, deterministic in production.</p>
+      </section>
+
+      <section className="market-explorer panel">
+        <div className="panel-heading">
+          <div><span className="step">00</span><h2>Market explorer</h2></div>
+          <span className="tag">SEARCH / TRACK / MONITOR</span>
+        </div>
+        <div className="market-grid">
+          <div className="stock-search">
+            <p className="section-label">FIND A STOCK</p>
+            <form onSubmit={searchStock}>
+              <span className="search-icon">⌕</span>
+              <input value={search} onChange={(event) => setSearch(event.target.value.toUpperCase())} placeholder="AAPL, NVDA, MSFT…" aria-label="Search stock ticker" />
+              <button disabled={busy === 'search'}>{busy === 'search' ? 'Searching…' : 'Search quote'}</button>
+            </form>
+            <p className="search-message">{searchMessage}</p>
+            <div className="quick-symbols">
+              <span>QUICK SEARCH</span>
+              {['NVDA', 'AAPL', 'MSFT', 'TSLA'].map((symbol) => <button key={symbol} onClick={() => setSearch(symbol)}>{symbol}</button>)}
+            </div>
+            {quote && (
+              <div className="quote-result">
+                <div><span>{quote.provider}</span><strong>{quote.symbol}</strong></div>
+                <strong>${Number(quote.price).toFixed(2)}</strong>
+                <time>{new Date(quote.timestamp).toLocaleString()}</time>
+                {tracked.some((item) => item.symbol === quote.symbol)
+                  ? <button className="tracked-button" onClick={() => untrackSymbol(quote.symbol)}>✓ Tracked</button>
+                  : <button className="track-button" onClick={() => trackSymbol(quote.symbol)}>+ Track stock</button>}
+              </div>
+            )}
+          </div>
+          <div className="watchlist">
+            <div className="watchlist-title">
+              <div><p className="section-label">TRACKED SYMBOLS</p><h3>Your market watchlist</h3></div>
+              <span>{tracked.length}</span>
+            </div>
+            {tracked.length === 0 ? (
+              <div className="watchlist-empty"><b>NO SYMBOLS TRACKED</b><p>Search for a ticker and add it to your watchlist.</p></div>
+            ) : (
+              <div className="tracked-list">
+                {tracked.map((item) => (
+                  <div className="tracked-row" key={item.symbol}>
+                    <span className="tracking-dot" />
+                    <strong>{item.symbol}</strong>
+                    <span>Rules ready</span>
+                    <time>{new Date(item.created_at).toLocaleDateString()}</time>
+                    <button aria-label={`Remove ${item.symbol}`} onClick={() => untrackSymbol(item.symbol)} disabled={busy === `track-${item.symbol}`}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </section>
 
       <section className="workspace">

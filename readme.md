@@ -36,6 +36,7 @@ produce identical results. This behavior is covered by automated tests.
 - Deterministic Chinese and English natural-language compiler
 - Alembic-managed database schema
 - Responsive React rule, backtest, and alert dashboard
+- Persistent tracked-symbol watchlist with live ticker lookup
 
 ## Example rule
 
@@ -124,10 +125,11 @@ CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 The dashboard is intentionally centered on the project's differentiating flow:
 
 1. Write a market rule in natural language.
-2. Compile it into a validated and explainable Rule DSL.
-3. Review and activate the versioned rule.
-4. Replay stored market bars and inspect forward returns.
-5. View and acknowledge alerts produced by the live Kafka worker.
+2. Search an exact ticker and add it to the persistent watchlist.
+3. Compile the text into a validated and explainable Rule DSL.
+4. Review and activate the versioned rule.
+5. Replay stored market bars and inspect forward returns.
+6. View and acknowledge alerts produced by the live Kafka worker.
 
 The UI uses realistic sample content on first render so the project remains
 presentable before the local services are started. Actions use the real FastAPI
@@ -175,6 +177,18 @@ PUT   /rules/{rule_id}
 GET   /rules/{rule_id}/versions
 PATCH /rules/{rule_id}/status
 ```
+
+### Stock lookup and watchlist
+
+```text
+GET    /prices/latest?symbol=NVDA
+GET    /watchlist
+POST   /watchlist
+DELETE /watchlist/{symbol}
+```
+
+The dashboard uses exact ticker lookup for the latest yfinance quote. Tracked
+symbols are stored in PostgreSQL and remain available after a page refresh.
 
 ### Backtests
 
