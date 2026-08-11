@@ -49,3 +49,27 @@ def test_rejects_period_beyond_configured_history():
         assert "between 1 and 20" in str(exc)
     else:
         raise AssertionError("expected invalid period to be rejected")
+
+
+def test_seeds_ema_with_sma_then_updates_incrementally():
+    engine = IndicatorEngine()
+
+    first = engine.update(market_event(1, 10, 100), [3])
+    second = engine.update(market_event(2, 20, 100), [3])
+    seeded = engine.update(market_event(3, 30, 100), [3])
+    updated = engine.update(market_event(4, 40, 100), [3])
+
+    assert first.get("ema", 3) is None
+    assert second.get("ema", 3) is None
+    assert seeded.get("ema", 3) == 20
+    assert updated.get("ema", 3) == 30
+
+
+def test_keeps_ema_state_isolated_by_symbol():
+    engine = IndicatorEngine()
+    for day, close in enumerate([10, 20, 30], start=1):
+        engine.update(market_event(day, close, 100, "NVDA"), [3])
+
+    apple = engine.update(market_event(4, 100, 100, "AAPL"), [3])
+
+    assert apple.get("ema", 3) is None
