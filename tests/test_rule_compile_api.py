@@ -58,3 +58,33 @@ def test_rejects_text_outside_supported_compiler_grammar():
     )
 
     assert response.status_code == 422
+
+
+def test_compiles_rsi_threshold_rule():
+    response = client().post(
+        "/rules/compile",
+        json={"text": "当 NVDA RSI14 低于 30 时提醒我"},
+    )
+
+    assert response.status_code == 200
+    condition = response.json()["definition"]["conditions"]["all"][0]
+    assert condition == {
+        "left": {"type": "indicator", "indicator": "rsi", "period": 14},
+        "operator": "<",
+        "right": {"type": "value", "value": 30.0},
+    }
+
+
+def test_compiles_indicator_cross_rule():
+    response = client().post(
+        "/rules/compile",
+        json={"text": "When NVDA EMA20 crosses above SMA50 on daily bars, alert me."},
+    )
+
+    assert response.status_code == 200
+    condition = response.json()["definition"]["conditions"]["all"][0]
+    assert condition == {
+        "left": {"type": "indicator", "indicator": "ema", "period": 20},
+        "operator": "crosses_above",
+        "right": {"type": "indicator", "indicator": "sma", "period": 50},
+    }
