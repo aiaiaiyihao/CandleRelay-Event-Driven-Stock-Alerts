@@ -12,6 +12,7 @@ from app.api.ruleRouter import router as rules_router
 from app.api.watchlist_router import router as watchlist_router
 from app.api.auth_router import router as auth_router
 from app.api.favorite_router import router as favorite_router
+from app.api.market_router import router as market_router
 from app.core.config import APP_DEBUG, APP_NAME, APP_VERSION, CORS_ORIGINS, redis
 from app.kafka.Producer import producer
 
@@ -63,3 +64,4 @@ app.include_router(health_router)
 app.include_router(watchlist_router)
 app.include_router(auth_router)
 app.include_router(favorite_router)
+app.include_router(market_router)

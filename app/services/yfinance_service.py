@@ -6,6 +6,18 @@ import asyncio
 CHART_RANGES = {"1mo", "3mo", "6mo", "1y"}
 CHART_POINT_LIMITS = {"1mo": 22, "3mo": 66, "6mo": 132, "1y": 252}
 CHART_HISTORY_PERIOD = "2y"
+MARKET_INDEXES = {
+    "^GSPC": "S&P 500",
+    "^IXIC": "Nasdaq Composite",
+    "^DJI": "Dow Jones",
+    "^RUT": "Russell 2000",
+}
+LARGE_CAP_UNIVERSE = (
+    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "BRK-B", "JPM",
+    "LLY", "V", "WMT", "XOM", "MA", "COST", "ORCL", "NFLX", "HD", "PG",
+    "JNJ", "ABBV", "BAC", "KO", "CRM", "AMD", "PEP", "TMO", "CSCO", "ACN",
+    "MCD", "IBM", "GE", "CAT", "GS", "AXP", "UBER", "DIS", "QCOM", "INTC",
+)
 
 #call remote api to fetch price
 async def fetch_price_yfinance(symbol: str):
@@ -116,3 +128,52 @@ def moving_average(values: list[float], period: int) -> list[float | None]:
             running_total -= values[index - period]
         result.append(running_total / period if index >= period - 1 else None)
     return result
+
+
+async def fetch_market_overview() -> dict:
+    symbols = [*MARKET_INDEXES, *LARGE_CAP_UNIVERSE]
+
+    def load_market_data():
+        return yf.download(
+            tickers=symbols,
+            period="5d",
+            interval="1d",
+            auto_adjust=False,
+            group_by="ticker",
+            progress=False,
+            threads=True,
+        )
+
+    try:
+        history = await asyncio.to_thread(load_market_data)
+    except Exception as exc:
+        raise ValueError(f"yfinance market overview error: {exc}") from exc
+
+    snapshots = []
+    for symbol in symbols:
+        try:
+            frame = history[symbol]
+            closes = [float(value) for value in frame["Close"].dropna().tolist()]
+            if len(closes) < 2:
+                continue
+            previous, price = closes[-2:]
+            snapshots.append(
+                {
+                    "symbol": symbol,
+                    "name": MARKET_INDEXES.get(symbol, symbol),
+                    "price": price,
+                    "change": price - previous,
+                    "change_percent": ((price / previous) - 1) * 100,
+                    "sparkline": closes,
+                }
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
+
+    indexes = [item for item in snapshots if item["symbol"] in MARKET_INDEXES]
+    stocks = [item for item in snapshots if item["symbol"] not in MARKET_INDEXES]
+    return {
+        "indexes": indexes,
+        "gainers": sorted(stocks, key=lambda item: item["change_percent"], reverse=True)[:10],
+        "losers": sorted(stocks, key=lambda item: item["change_percent"])[:10],
+    }
