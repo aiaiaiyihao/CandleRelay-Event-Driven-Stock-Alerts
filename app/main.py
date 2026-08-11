@@ -2,17 +2,14 @@ from fastapi import FastAPI
 from app.models.MovingAverage import MovingAverage
 from app.models.RawPrice import RawPrice
 from app.models.PollTask import PollTask
+from app.models.Rule import Rule, RuleVersion
 from app.api.priceRouter import router as prices_router
 from app.core.config import Base, engine
-from sqlalchemy import text
 import logging
 from app.core.config import redis
 from app.kafka.Producer import producer
 from contextlib import asynccontextmanager
-from app.core.config import producer_config
 
-# drop all the tables
-Base.metadata.drop_all(bind=engine)
 # create all the tables
 Base.metadata.create_all(bind=engine)
 
@@ -53,5 +50,4 @@ logging.basicConfig(
 #     return {"message": "Hello World"}
 
 app.include_router(prices_router)
-
 

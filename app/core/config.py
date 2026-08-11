@@ -1,3 +1,5 @@
+import os
+
 from redis.asyncio import Redis
 from sqlalchemy.engine.create import create_engine
 from sqlalchemy.orm.decl_api import declarative_base
@@ -5,7 +7,7 @@ from sqlalchemy.orm.session import sessionmaker
 
 # Configure kafka connection
 producer_config = {
-    "bootstrap.servers": "localhost:9092",
+    "bootstrap.servers": os.getenv("KAFKA_BOOTSTRAP", "localhost:9092"),
     "retries": 5,
     "retry.backoff.ms": 100,         # optional: wait 100ms between retries
     "message.timeout.ms": 10000,     # give up after 10s if not delivered
@@ -13,10 +15,14 @@ producer_config = {
 }
 
 #Redis
-redis = Redis.from_url("redis://localhost:6379/0", decode_responses=True)
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+redis = Redis.from_url(REDIS_URL, decode_responses=True)
 
 #PostgreSQL DataBase
-DATABASE_URL = "postgresql://admin:admin@localhost:5432/marketdb"
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://admin:admin@localhost:5432/marketdb",
+)
 
 # engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 engine = create_engine(DATABASE_URL)
