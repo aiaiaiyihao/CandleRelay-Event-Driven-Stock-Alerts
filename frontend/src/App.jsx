@@ -256,6 +256,13 @@ function App() {
   }, [tracked])
 
   useEffect(() => {
+    if (page === 'favorites' && tracked.length && !tracked.some((item) => item.symbol === selectedSymbol)) {
+      setSelectedSymbol(tracked[0].symbol)
+      setChartPeriod('1d')
+    }
+  }, [page, tracked, selectedSymbol])
+
+  useEffect(() => {
     let active = true
     setChartMessage(`Loading ${selectedSymbol} history…`)
     api.chart(selectedSymbol, chartPeriod)
@@ -472,7 +479,9 @@ function App() {
   }
 
   function selectTrackedSymbol(symbol) {
-    navigateStock(symbol)
+    setSelectedSymbol(symbol)
+    setSearch(symbol)
+    setChartPeriod('1d')
   }
 
   function selectMarketSymbol(symbol) {
@@ -596,48 +605,17 @@ function App() {
       </section>}
 
       {page === 'favorites' && <>
-      <section className="favorites-heading page-surface"><p className="eyebrow">PERSONAL MARKET WORKSPACE</p><h1>My Favorites</h1><p>Search, save, sort, and inspect the stocks that matter to you.</p></section>
-      <section className="market-explorer panel" id="favorites">
-        <div className="panel-heading">
-          <div><span className="step">00</span><h2>Market explorer</h2></div>
-          <span className="tag">PRIVATE / SORTABLE / PERSISTENT</span>
+      <section className="favorites-heading page-surface">
+        <div><p className="eyebrow">PERSONAL MARKET WORKSPACE</p><h1>My Favorites</h1><p>Search, save, sort, and inspect the stocks that matter to you.</p></div>
+        <div className="favorites-search stock-search">
+          <p className="section-label">FIND A STOCK</p>
+          <form onSubmit={searchStock}><span className="search-icon">⌕</span><input value={search} onChange={(event) => setSearch(event.target.value.toUpperCase())} placeholder="AAPL, NVDA, MSFT…" aria-label="Search stock ticker" /><button disabled={busy === 'search'}>{busy === 'search' ? 'Searching…' : 'Search'}</button></form>
+          {suggestions.length > 0 && <div className="stock-suggestions" role="listbox" aria-label="Stock suggestions">{suggestions.map((item) => <button type="button" key={`${item.symbol}-${item.exchange}`} onClick={() => chooseSuggestion(item)} role="option"><strong>{item.symbol}</strong><span>{item.name}</span><em>{item.exchange}</em></button>)}</div>}
+          <div className="favorites-search-status"><span>{searchMessage}</span>{quote && (tracked.some((item) => item.symbol === quote.symbol) ? <button className="tracked-button" onClick={() => untrackSymbol(quote.symbol)}>★ FAVORITE</button> : <button className="track-button" onClick={() => trackSymbol(quote.symbol)}>☆ ADD FAVORITE</button>)}</div>
         </div>
-        <div className="market-grid">
-          <div className="stock-search">
-            <p className="section-label">FIND A STOCK</p>
-            <form onSubmit={searchStock}>
-              <span className="search-icon">⌕</span>
-              <input value={search} onChange={(event) => setSearch(event.target.value.toUpperCase())} placeholder="AAPL, NVDA, MSFT…" aria-label="Search stock ticker" />
-              <button disabled={busy === 'search'}>{busy === 'search' ? 'Searching…' : 'Search quote'}</button>
-            </form>
-            {suggestions.length > 0 && (
-              <div className="stock-suggestions" role="listbox" aria-label="Stock suggestions">
-                {suggestions.map((item) => (
-                  <button type="button" key={`${item.symbol}-${item.exchange}`} onClick={() => chooseSuggestion(item)} role="option">
-                    <strong>{item.symbol}</strong>
-                    <span>{item.name}</span>
-                    <em>{item.exchange}</em>
-                  </button>
-                ))}
-              </div>
-            )}
-            <p className="search-message">{searchMessage}</p>
-            <div className="quick-symbols">
-              <span>QUICK SEARCH</span>
-              {['NVDA', 'AAPL', 'MSFT', 'TSLA'].map((symbol) => <button key={symbol} onClick={() => setSearch(symbol)}>{symbol}</button>)}
-            </div>
-            {quote && (
-              <div className="quote-result">
-                <div><span>{quote.provider}</span><strong>{quote.symbol}</strong></div>
-                <strong>${Number(quote.price).toFixed(2)}</strong>
-                <time>{new Date(quote.timestamp).toLocaleString()}</time>
-                {tracked.some((item) => item.symbol === quote.symbol)
-                  ? <button className="tracked-button" onClick={() => untrackSymbol(quote.symbol)}>★ Favorite</button>
-                  : <button className="track-button" onClick={() => trackSymbol(quote.symbol)}>☆ Add favorite</button>}
-              </div>
-            )}
-          </div>
-          <div className="watchlist">
+      </section>
+      <section className="favorites-workspace" id="favorites">
+          <div className="watchlist panel">
             <div className="watchlist-title">
               <div><p className="section-label">MY FAVORITES</p><h3>{user ? 'Your private watchlist' : 'Sign in to save stocks'}</h3></div>
               <span>{tracked.length}</span>
@@ -659,51 +637,7 @@ function App() {
               </div><div className="favorite-pagination"><button disabled={favoritePage === 0} onClick={() => setFavoritePage((value) => value - 1)}>←</button><span>{favoritePage + 1} / {favoritePageCount}</span><button disabled={favoritePage >= favoritePageCount - 1} onClick={() => setFavoritePage((value) => value + 1)}>→</button></div></>
             )}
           </div>
-        </div>
-      </section>
-
-      <section className="stock-chart-panel panel" id="stock-chart">
-        <div className="chart-header">
-          <div className="chart-symbol">
-            <span>SELECTED MARKET</span>
-            <h2>{selectedSymbol}</h2>
-          </div>
-          <div className="chart-controls">
-            <div className="interval-switcher" aria-label="Chart period">
-              {CHART_PERIODS.map(([value, label]) => (
-                <button className={chartPeriod === value ? 'active' : ''} key={value} onClick={() => setChartPeriod(value)}>{label}</button>
-              ))}
-            </div>
-            <div className="average-switcher" aria-label="Moving averages">
-              {[['sma_20', 'SMA 20'], ['sma_50', 'SMA 50'], ['sma_200', 'SMA 200']].map(([key, label]) => (
-                <button className={visibleAverages[key] ? `active ${key}` : ''} key={key} onClick={() => setVisibleAverages((values) => ({ ...values, [key]: !values[key] }))}><i />{label}</button>
-              ))}
-            </div>
-            <span className="period-info">{CHART_PERIOD_INFO[chartPeriod]}</span>
-          </div>
-        </div>
-        <div className="interactive-chart">
-          {chartData.length ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={chartData} margin={{ top: 16, right: 14, bottom: 4, left: 0 }}>
-                <defs>
-                  <linearGradient id="priceFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#e76d2d" stopOpacity={0.28} />
-                    <stop offset="100%" stopColor="#e76d2d" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid stroke="#252728" vertical={false} />
-                <XAxis dataKey="date" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} minTickGap={34} />
-                <YAxis domain={['auto', 'auto']} orientation="right" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} width={52} tickFormatter={(value) => `$${Number(value).toFixed(0)}`} />
-                <Tooltip content={<ChartTooltip />} />
-                <Area type="monotone" dataKey="close" name="Price" stroke="#e9e7e1" strokeWidth={2} fill="url(#priceFill)" dot={false} activeDot={{ r: 4, fill: '#e76d2d', stroke: '#0d0f10', strokeWidth: 2 }} />
-                {visibleAverages.sma_20 && <Line type="monotone" dataKey="sma_20" name="SMA 20" stroke="#e76d2d" strokeWidth={1.5} dot={false} connectNulls={false} />}
-                {visibleAverages.sma_50 && <Line type="monotone" dataKey="sma_50" name="SMA 50" stroke="#5fd398" strokeWidth={1.4} dot={false} connectNulls={false} />}
-                {visibleAverages.sma_200 && <Line type="monotone" dataKey="sma_200" name="SMA 200" stroke="#8887d8" strokeWidth={1.4} dot={false} connectNulls={false} />}
-              </ComposedChart>
-            </ResponsiveContainer>
-          ) : <div className="chart-empty">{chartMessage}</div>}
-        </div>
+          <MarketChart symbol={selectedSymbol} displayName={marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
       </section>
       </>}
 
