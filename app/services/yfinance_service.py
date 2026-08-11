@@ -101,7 +101,7 @@ async def fetch_stock_detail_yfinance(symbol: str, force_refresh: bool = False) 
     if not force_refresh:
         cached = await get_cached_json(cache_key)
         if cached is not None:
-            return cached
+            return {**cached, "news": await fetch_stock_news_yfinance(symbol)}
 
     def load_detail():
         return yf.Ticker(symbol).info
@@ -138,7 +138,45 @@ async def fetch_stock_detail_yfinance(symbol: str, force_refresh: bool = False) 
         "updated_at": datetime.fromtimestamp(timestamp, tz=timezone.utc) if timestamp else datetime.now(timezone.utc),
     }
     await set_cached_json(cache_key, detail, ttl_seconds=60)
-    return detail
+    return {**detail, "news": await fetch_stock_news_yfinance(symbol, force_refresh=force_refresh)}
+
+
+async def fetch_stock_news_yfinance(symbol: str, force_refresh: bool = False) -> list[dict]:
+    cache_key = f"candlerelay:stock-news:{symbol.upper()}"
+    if not force_refresh:
+        cached = await get_cached_json(cache_key)
+        if cached is not None:
+            return cached
+
+    def load_news():
+        return yf.Ticker(symbol).news
+
+    try:
+        raw_news = await asyncio.to_thread(load_news)
+    except Exception:
+        return []
+
+    news = []
+    for item in raw_news or []:
+        content = item.get("content") or item
+        title = content.get("title")
+        provider = content.get("provider") or {}
+        canonical_url = content.get("canonicalUrl") or {}
+        click_url = content.get("clickThroughUrl") or {}
+        url = canonical_url.get("url") or click_url.get("url") or content.get("link")
+        if not title or not url:
+            continue
+        news.append({
+            "title": title,
+            "publisher": provider.get("displayName") or content.get("publisher") or "Market News",
+            "published_at": content.get("pubDate") or content.get("providerPublishTime"),
+            "url": url,
+        })
+        if len(news) == 5:
+            break
+
+    await set_cached_json(cache_key, news, ttl_seconds=300)
+    return news
 
 
 async def fetch_chart_yfinance(symbol: str, chart_range: str, chart_interval: str = "1d") -> dict:

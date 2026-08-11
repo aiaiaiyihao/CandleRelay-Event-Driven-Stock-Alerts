@@ -46,6 +46,12 @@ def test_stock_detail_returns_market_statistics():
         "change": 5,
         "change_percent": 2.7,
         "market_cap": 4_000_000_000_000,
+        "news": [{
+            "title": "NVIDIA announces a new platform",
+            "publisher": "Reuters",
+            "published_at": "2026-08-11T18:00:00Z",
+            "url": "https://example.com/nvda-news",
+        }],
     }
     with patch("app.api.priceRouter.fetch_stock_detail_yfinance", new=AsyncMock(return_value=detail)) as fetch:
         response = client().get("/stocks/nvda/detail")
@@ -53,4 +59,5 @@ def test_stock_detail_returns_market_statistics():
     assert response.status_code == 200
     assert response.json()["symbol"] == "NVDA"
     assert response.json()["market_cap"] == 4_000_000_000_000
+    assert response.json()["news"][0]["publisher"] == "Reuters"
     fetch.assert_awaited_once_with("NVDA", force_refresh=False)

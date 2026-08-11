@@ -571,6 +571,7 @@ function App() {
       {page === 'stock' && <section className="stock-detail-page page-surface">
         <button className="back-link" onClick={() => window.history.length > 1 ? window.history.back() : navigate('dashboard')}>← BACK</button>
         {stockDetail ? <>
+          <div className="stock-detail-grid">
           <section className="stock-summary panel">
             <div className="stock-identity"><div><p className="eyebrow">{stockDetail.exchange || 'US MARKET'} · {stockDetail.currency || 'USD'}</p><h1>{stockDetail.symbol}</h1><h2>{stockDetail.name}</h2><p>{[stockDetail.sector, stockDetail.industry].filter(Boolean).join(' · ')}</p></div><div className="stock-price"><strong>${stockDetail.price.toFixed(2)}</strong><span className={(stockDetail.change_percent || 0) >= 0 ? 'up' : 'down'}>{stockDetail.change_percent >= 0 ? '+' : ''}{stockDetail.change?.toFixed(2)} ({stockDetail.change_percent?.toFixed(2)}%)</span>{Math.abs(stockDetail.change_percent || 0) >= 50 && <em>EXTREME MOVE · VERIFY QUOTE</em>}<small>{stockDetail.market_state || 'MARKET DATA'}{stockDetail.updated_at ? ` · UPDATED ${new Date(stockDetail.updated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}` : ''}</small></div></div>
             <div className="stock-actions"><button className={tracked.some((item) => item.symbol === stockDetail.symbol) ? 'active' : ''} onClick={() => tracked.some((item) => item.symbol === stockDetail.symbol) ? untrackSymbol(stockDetail.symbol) : trackSymbol(stockDetail.symbol)}>{tracked.some((item) => item.symbol === stockDetail.symbol) ? '★ IN FAVORITES' : '☆ ADD TO FAVORITES'}</button><button className="primary" onClick={() => createAlertForStock(stockDetail.symbol)}>CREATE ALERT →</button></div>
@@ -578,6 +579,13 @@ function App() {
               ['OPEN', stockDetail.open, 'price'], ['PREVIOUS CLOSE', stockDetail.previous_close, 'price'], ['DAY HIGH', stockDetail.day_high, 'price'], ['DAY LOW', stockDetail.day_low, 'price'], ['VOLUME', stockDetail.volume, 'number'], ['MARKET CAP', stockDetail.market_cap, 'compact'], ['52W HIGH', stockDetail.fifty_two_week_high, 'price'], ['52W LOW', stockDetail.fifty_two_week_low, 'price'],
             ].map(([label, value, format]) => <div key={label}><span>{label}</span><strong>{value == null ? '—' : format === 'price' ? `$${Number(value).toFixed(2)}` : format === 'compact' ? Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(value) : Number(value).toLocaleString()}</strong></div>)}</div>
           </section>
+          <aside className="stock-news panel">
+            <div className="stock-news-heading"><div><p className="eyebrow">LATEST COMPANY COVERAGE</p><h2>Major News</h2></div><span>UP TO 5</span></div>
+            <div className="stock-news-list">
+              {stockDetail.news?.length ? stockDetail.news.map((item) => <a key={`${item.url}-${item.title}`} href={item.url} target="_blank" rel="noreferrer"><strong>{item.title}</strong><span>{item.publisher}{item.published_at ? ` · ${new Date(item.published_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</span></a>) : <div className="stock-news-empty">NO RECENT NEWS AVAILABLE</div>}
+            </div>
+          </aside>
+          </div>
           <MarketChart symbol={selectedSymbol} displayName={stockDetail.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} />
         </> : <div className="stock-detail-loading panel">{busy === 'stock-detail' ? 'LOADING STOCK DETAILS…' : 'STOCK DETAILS UNAVAILABLE'}</div>}
       </section>}

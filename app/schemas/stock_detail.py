@@ -1,6 +1,13 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class StockNewsItem(BaseModel):
+    title: str
+    publisher: str
+    published_at: datetime | None = None
+    url: str
 
 
 class StockDetailResponse(BaseModel):
@@ -23,3 +30,4 @@ class StockDetailResponse(BaseModel):
     fifty_two_week_low: float | None = None
     market_state: str | None = None
     updated_at: datetime | None = None
+    news: list[StockNewsItem] = Field(default_factory=list)
