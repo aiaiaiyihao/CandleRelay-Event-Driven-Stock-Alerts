@@ -260,10 +260,11 @@ function App() {
   const [favoriteNewsPage, setFavoriteNewsPage] = useState(0)
   const [favoriteSort, setFavoriteSort] = useState('change_desc')
   const [favoritePage, setFavoritePage] = useState(0)
-  const [search, setSearch] = useState('NVDA')
+  const [search, setSearch] = useState('')
   const [quote, setQuote] = useState(null)
   const [searchMessage, setSearchMessage] = useState('Enter an exact ticker symbol')
   const [suggestions, setSuggestions] = useState([])
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false)
   const [selectedSymbol, setSelectedSymbol] = useState(() => window.location.pathname.startsWith('/stocks/') ? window.location.pathname.split('/')[2].toUpperCase() : 'NVDA')
   const [chartPeriod, setChartPeriod] = useState('3mo')
   const [chartData, setChartData] = useState([])
@@ -272,6 +273,7 @@ function App() {
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('Ready to compile')
   const previewTimer = useRef(null)
+  const suggestionTimer = useRef(null)
 
   useEffect(() => {
     if (window.location.pathname === '/') {
@@ -283,7 +285,10 @@ function App() {
     api.alerts().then(setAlerts).catch(() => {})
   }, [])
 
-  useEffect(() => () => window.clearTimeout(previewTimer.current), [])
+  useEffect(() => () => {
+    window.clearTimeout(previewTimer.current)
+    window.clearTimeout(suggestionTimer.current)
+  }, [])
 
   useEffect(() => {
     const handleNavigation = () => {
@@ -377,7 +382,7 @@ function App() {
 
   useEffect(() => {
     const query = search.trim()
-    if (!query) {
+    if (!query || !suggestionsOpen) {
       setSuggestions([])
       return undefined
     }
@@ -391,7 +396,7 @@ function App() {
       active = false
       window.clearTimeout(timer)
     }
-  }, [search])
+  }, [search, suggestionsOpen])
 
   const returns = useMemo(() => backtest?.result_summary?.average_forward_returns || {}, [backtest])
   const marketBySymbol = useMemo(() => Object.fromEntries(
@@ -545,6 +550,7 @@ function App() {
 
   async function lookupStock(symbol) {
     if (!symbol) return
+    setSuggestionsOpen(false)
     setSuggestions([])
     setBusy('search')
     setQuote(null)
@@ -568,8 +574,19 @@ function App() {
   }
 
   function chooseSuggestion(item) {
+    setSuggestionsOpen(false)
     setSearch(item.symbol)
     lookupStock(item.symbol)
+  }
+
+  function updateStockSearch(value) {
+    setSearch(value.toUpperCase())
+    setSuggestionsOpen(Boolean(value.trim()))
+    window.clearTimeout(suggestionTimer.current)
+    suggestionTimer.current = window.setTimeout(() => {
+      setSuggestionsOpen(false)
+      setSuggestions([])
+    }, 3000)
   }
 
   async function trackSymbol(symbol) {
@@ -726,8 +743,8 @@ function App() {
         <div><p className="eyebrow">PERSONAL MARKET WORKSPACE</p><h1>My Favorites</h1><p>Search, save, sort, and inspect the stocks that matter to you.</p></div>
         <div className="favorites-search stock-search">
           <p className="section-label">FIND A STOCK</p>
-          <form onSubmit={searchStock}><span className="search-icon">⌕</span><input value={search} onChange={(event) => setSearch(event.target.value.toUpperCase())} placeholder="AAPL, NVDA, MSFT…" aria-label="Search stock ticker" /><button disabled={busy === 'search'}>{busy === 'search' ? 'Searching…' : 'Search'}</button></form>
-          {suggestions.length > 0 && <div className="stock-suggestions" role="listbox" aria-label="Stock suggestions" onMouseLeave={() => setSuggestions([])}>{suggestions.map((item) => <button type="button" key={`${item.symbol}-${item.exchange}`} onClick={() => chooseSuggestion(item)} role="option"><strong>{item.symbol}</strong><span>{item.name}</span><em>{item.exchange}</em></button>)}</div>}
+          <form onSubmit={searchStock}><span className="search-icon">⌕</span><input value={search} onChange={(event) => updateStockSearch(event.target.value)} placeholder="AAPL, NVDA, MSFT…" aria-label="Search stock ticker" /><button disabled={busy === 'search'}>{busy === 'search' ? 'Searching…' : 'Search'}</button></form>
+          {suggestionsOpen && suggestions.length > 0 && <div className="stock-suggestions" role="listbox" aria-label="Stock suggestions" onMouseLeave={() => { setSuggestionsOpen(false); setSuggestions([]) }}>{suggestions.map((item) => <button type="button" key={`${item.symbol}-${item.exchange}`} onClick={() => chooseSuggestion(item)} role="option"><strong>{item.symbol}</strong><span>{item.name}</span><em>{item.exchange}</em></button>)}</div>}
           <div className="favorites-search-status"><span>{searchMessage}</span>{quote && (tracked.some((item) => item.symbol === quote.symbol) ? <button className="tracked-button" onClick={() => untrackSymbol(quote.symbol)}>★ FAVORITE</button> : <button className="track-button" onClick={() => trackSymbol(quote.symbol)}>☆ ADD FAVORITE</button>)}</div>
         </div>
       </section>
