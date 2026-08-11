@@ -128,10 +128,15 @@ function MoverList({ title, items, tone, page, setPage, selectedSymbol, selectSy
 function MarketChart({ symbol, displayName, period, setPeriod, data, message, averages, setAverages, compact = false }) {
   const [zoomLevel, setZoomLevel] = useState(0)
   const [yStretch, setYStretch] = useState(0)
+  const [panOffset, setPanOffset] = useState(0)
+  const [panning, setPanning] = useState(false)
+  const panStart = useRef(null)
   const zoomRatios = [1, 0.75, 0.5, 0.25, 0.125]
   const yPaddingRatios = [0.3, 0.16, 0.07, 0.02]
   const visibleCount = Math.max(10, Math.ceil(data.length * zoomRatios[zoomLevel]))
-  const visibleData = useMemo(() => data.slice(-visibleCount), [data, visibleCount])
+  const maximumPan = Math.max(0, data.length - visibleCount)
+  const visibleEnd = data.length - panOffset
+  const visibleData = useMemo(() => data.slice(Math.max(0, visibleEnd - visibleCount), visibleEnd), [data, visibleCount, visibleEnd])
   const yDomain = useMemo(() => {
     const keys = ['close', ...Object.keys(averages).filter((key) => averages[key])]
     const values = visibleData.flatMap((point) => keys.map((key) => point[key]).filter((value) => Number.isFinite(value)))
@@ -146,11 +151,38 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
   useEffect(() => {
     setZoomLevel(0)
     setYStretch(0)
+    setPanOffset(0)
   }, [symbol, period])
+
+  useEffect(() => {
+    setPanOffset((value) => Math.min(value, maximumPan))
+  }, [maximumPan])
 
   function resetChartView() {
     setZoomLevel(0)
     setYStretch(0)
+    setPanOffset(0)
+  }
+
+  function beginPan(event) {
+    if (maximumPan === 0 || event.button !== 0) return
+    panStart.current = { x: event.clientX, offset: panOffset, width: event.currentTarget.clientWidth }
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setPanning(true)
+  }
+
+  function movePan(event) {
+    if (!panStart.current) return
+    const distance = event.clientX - panStart.current.x
+    const points = Math.round((distance / panStart.current.width) * visibleCount)
+    setPanOffset(Math.max(0, Math.min(maximumPan, panStart.current.offset + points)))
+  }
+
+  function endPan(event) {
+    if (!panStart.current) return
+    panStart.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+    setPanning(false)
   }
 
   return (
@@ -168,6 +200,8 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
             <span>X {Math.round(1 / zoomRatios[zoomLevel] * 10) / 10}×</span>
             <button disabled={zoomLevel === 0} onClick={() => setZoomLevel((value) => Math.max(0, value - 1))} aria-label="Zoom chart out">−</button>
             <button disabled={zoomLevel === zoomRatios.length - 1} onClick={() => setZoomLevel((value) => Math.min(zoomRatios.length - 1, value + 1))} aria-label="Zoom chart in">+</button>
+            <button disabled={panOffset >= maximumPan} onClick={() => setPanOffset((value) => Math.min(maximumPan, value + Math.max(1, Math.round(visibleCount * 0.25))))} aria-label="Pan to older data">←</button>
+            <button disabled={panOffset === 0} onClick={() => setPanOffset((value) => Math.max(0, value - Math.max(1, Math.round(visibleCount * 0.25))))} aria-label="Pan to newer data">→</button>
             <span>Y {yStretch + 1}×</span>
             <button disabled={yStretch === 0} onClick={() => setYStretch((value) => Math.max(0, value - 1))} aria-label="Compress price axis">−</button>
             <button disabled={yStretch === yPaddingRatios.length - 1} onClick={() => setYStretch((value) => Math.min(yPaddingRatios.length - 1, value + 1))} aria-label="Stretch price axis">+</button>
@@ -176,7 +210,7 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
           <span className="period-info">{CHART_PERIOD_INFO[period]}</span>
         </div>
       </div>
-      <div className="interactive-chart" onWheel={(event) => { if (!event.ctrlKey && !event.metaKey) return; event.preventDefault(); setZoomLevel((value) => Math.max(0, Math.min(zoomRatios.length - 1, value + (event.deltaY < 0 ? 1 : -1)))) }}>
+      <div className={`interactive-chart ${panning ? 'panning' : ''}`} onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={(event) => { if (!event.ctrlKey && !event.metaKey) return; event.preventDefault(); setZoomLevel((value) => Math.max(0, Math.min(zoomRatios.length - 1, value + (event.deltaY < 0 ? 1 : -1)))) }}>
         {visibleData.length ? <ResponsiveContainer width="100%" height="100%"><ComposedChart data={visibleData} margin={{ top: 16, right: 14, bottom: 4, left: 0 }}>
           <defs><linearGradient id={compact ? 'dashboardPriceFill' : 'favoritePriceFill'} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e76d2d" stopOpacity={0.28} /><stop offset="100%" stopColor="#e76d2d" stopOpacity={0} /></linearGradient></defs>
           <CartesianGrid stroke="#252728" vertical={false} />
