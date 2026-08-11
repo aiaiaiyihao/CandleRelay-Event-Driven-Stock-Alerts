@@ -82,6 +82,35 @@ const CHART_PERIOD_INFO = {
   max: 'full available history · monthly points',
 }
 
+const INTRADAY_INTERVALS = new Set(['1m', '5m', '10m', '30m', '60m', '4h'])
+
+function formatChartTimestamp(timestamp, interval, full = false) {
+  const value = new Date(timestamp)
+  if (INTRADAY_INTERVALS.has(interval)) {
+    return value.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: full ? 'numeric' : undefined,
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: full ? 'short' : undefined,
+    })
+  }
+  if (interval === '1mo') {
+    return value.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+  }
+  return value.toLocaleDateString('en-US', {
+    month: full ? 'long' : 'short',
+    day: 'numeric',
+    year: full ? 'numeric' : undefined,
+  })
+}
+
+function ChartTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  return <div className="chart-tooltip"><span>{payload[0].payload.tooltipDate || label}</span>{payload.map((item) => <div key={item.dataKey}><i style={{ background: item.color }} />{item.name}<strong>${Number(item.value).toFixed(2)}</strong></div>)}</div>
+}
+
 function MarketChart({ symbol, displayName, period, setPeriod, data, message, averages, setAverages, compact = false }) {
   return (
     <section className={`stock-chart-panel panel ${compact ? 'compact-chart' : ''}`} id={compact ? 'dashboard-chart' : 'stock-chart'}>
@@ -103,7 +132,7 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
           <CartesianGrid stroke="#252728" vertical={false} />
           <XAxis dataKey="date" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} minTickGap={34} />
           <YAxis domain={['auto', 'auto']} orientation="right" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} width={52} tickFormatter={(value) => `$${Number(value).toFixed(0)}`} />
-          <Tooltip content={({ active, payload, label }) => active && payload?.length ? <div className="chart-tooltip"><span>{label}</span>{payload.map((item) => <div key={item.dataKey}><i style={{ background: item.color }} />{item.name}<strong>${Number(item.value).toFixed(2)}</strong></div>)}</div> : null} />
+          <Tooltip content={<ChartTooltip />} />
           <Area type="monotone" dataKey="close" name="Price" stroke="#e9e7e1" strokeWidth={2} fill={`url(#${compact ? 'dashboardPriceFill' : 'favoritePriceFill'})`} dot={false} />
           {averages.sma_20 && <Line type="monotone" dataKey="sma_20" name="SMA 20" stroke="#e76d2d" strokeWidth={1.5} dot={false} />}
           {averages.sma_50 && <Line type="monotone" dataKey="sma_50" name="SMA 50" stroke="#5fd398" strokeWidth={1.4} dot={false} />}
@@ -184,9 +213,8 @@ function App() {
         if (!active) return
         setChartData(result.points.map((point) => ({
           ...point,
-          date: ['5m', '30m', '60m'].includes(result.interval)
-            ? new Date(point.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-            : new Date(point.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          date: formatChartTimestamp(point.timestamp, result.interval),
+          tooltipDate: formatChartTimestamp(point.timestamp, result.interval, true),
         })))
         setChartMessage('')
       })
@@ -539,7 +567,7 @@ function App() {
                 <CartesianGrid stroke="#252728" vertical={false} />
                 <XAxis dataKey="date" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} minTickGap={34} />
                 <YAxis domain={['auto', 'auto']} orientation="right" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} width={52} tickFormatter={(value) => `$${Number(value).toFixed(0)}`} />
-                <Tooltip content={({ active, payload, label }) => active && payload?.length ? <div className="chart-tooltip"><span>{label}</span>{payload.map((item) => <div key={item.dataKey}><i style={{ background: item.color }} />{item.name}<strong>${Number(item.value).toFixed(2)}</strong></div>)}</div> : null} />
+                <Tooltip content={<ChartTooltip />} />
                 <Area type="monotone" dataKey="close" name="Price" stroke="#e9e7e1" strokeWidth={2} fill="url(#priceFill)" dot={false} activeDot={{ r: 4, fill: '#e76d2d', stroke: '#0d0f10', strokeWidth: 2 }} />
                 {visibleAverages.sma_20 && <Line type="monotone" dataKey="sma_20" name="SMA 20" stroke="#e76d2d" strokeWidth={1.5} dot={false} connectNulls={false} />}
                 {visibleAverages.sma_50 && <Line type="monotone" dataKey="sma_50" name="SMA 50" stroke="#5fd398" strokeWidth={1.4} dot={false} connectNulls={false} />}
