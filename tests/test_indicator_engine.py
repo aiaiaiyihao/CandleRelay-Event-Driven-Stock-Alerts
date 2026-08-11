@@ -1,3 +1,5 @@
+import pytest
+
 from app.domain.events import MarketEvent
 from app.indicators.engine import IndicatorEngine
 
@@ -73,3 +75,24 @@ def test_keeps_ema_state_isolated_by_symbol():
     apple = engine.update(market_event(4, 100, 100, "AAPL"), [3])
 
     assert apple.get("ema", 3) is None
+
+
+def test_calculates_wilder_rsi_incrementally():
+    engine = IndicatorEngine()
+    snapshots = [
+        engine.update(market_event(day, close, 100), [3])
+        for day, close in enumerate([10, 11, 12, 13, 12], start=1)
+    ]
+
+    assert snapshots[2].get("rsi", 3) is None
+    assert snapshots[3].get("rsi", 3) == 100
+    assert float(snapshots[4].get("rsi", 3)) == pytest.approx(66.6666667)
+
+
+def test_returns_neutral_rsi_for_a_flat_market():
+    engine = IndicatorEngine()
+    snapshot = None
+    for day in range(1, 5):
+        snapshot = engine.update(market_event(day, 10, 100), [3])
+
+    assert snapshot.get("rsi", 3) == 50

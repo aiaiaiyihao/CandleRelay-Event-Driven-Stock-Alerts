@@ -28,6 +28,9 @@ class IndicatorEngine:
             lambda: deque(maxlen=max_period)
         )
         self._ema_values: dict[tuple[str, str, int], Decimal] = {}
+        self._rsi_averages: dict[
+            tuple[str, str, int], tuple[Decimal, Decimal]
+        ] = {}
 
     def update(self, event: MarketEvent, periods: Iterable[int]) -> IndicatorSnapshot:
         requested = sorted(set(periods))
@@ -46,6 +49,11 @@ class IndicatorEngine:
                 key,
                 closes_with_current,
                 event.close,
+                period,
+            )
+            values[f"rsi_{period}"] = self._next_rsi(
+                key,
+                closes_with_current,
                 period,
             )
             volume_average = self._average_last(previous_volumes, period)
@@ -79,6 +87,36 @@ class IndicatorEngine:
         if current_ema is not None:
             self._ema_values[ema_key] = current_ema
         return current_ema
+
+    def _next_rsi(
+        self,
+        key: tuple[str, str],
+        closes_with_current: list[Decimal],
+        period: int,
+    ) -> Decimal | None:
+        rsi_key = (*key, period)
+        averages = self._rsi_averages.get(rsi_key)
+        if averages is None:
+            if len(closes_with_current) < period + 1:
+                return None
+            window = closes_with_current[-(period + 1):]
+            changes = [current - previous for previous, current in zip(window, window[1:])]
+            average_gain = sum(max(change, Decimal(0)) for change in changes) / Decimal(period)
+            average_loss = sum(max(-change, Decimal(0)) for change in changes) / Decimal(period)
+        else:
+            change = closes_with_current[-1] - closes_with_current[-2]
+            gain = max(change, Decimal(0))
+            loss = max(-change, Decimal(0))
+            average_gain = (averages[0] * Decimal(period - 1) + gain) / Decimal(period)
+            average_loss = (averages[1] * Decimal(period - 1) + loss) / Decimal(period)
+
+        self._rsi_averages[rsi_key] = (average_gain, average_loss)
+        if average_gain == 0 and average_loss == 0:
+            return Decimal(50)
+        if average_loss == 0:
+            return Decimal(100)
+        relative_strength = average_gain / average_loss
+        return Decimal(100) - Decimal(100) / (Decimal(1) + relative_strength)
 
     @staticmethod
     def _average_last(values, period: int) -> Decimal | None:
