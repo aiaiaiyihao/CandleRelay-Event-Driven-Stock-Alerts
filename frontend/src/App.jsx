@@ -240,6 +240,8 @@ function App() {
   const [backtestStart, setBacktestStart] = useState('2026-07-01')
   const [backtestEnd, setBacktestEnd] = useState('2026-08-11')
   const [alerts, setAlerts] = useState([])
+  const [recentTriggers, setRecentTriggers] = useState([])
+  const [triggerIndex, setTriggerIndex] = useState(0)
   const [rules, setRules] = useState([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [tracked, setTracked] = useState([])
@@ -282,12 +284,17 @@ function App() {
   useEffect(() => {
     if (!user) {
       setAlerts([])
+      setRecentTriggers([])
       setRules([])
       setNotificationsOpen(false)
       return undefined
     }
     let active = true
-    const loadAlerts = () => api.alerts().then((items) => active && setAlerts(items)).catch(() => {})
+    const loadAlerts = () => Promise.all([api.alerts(), api.allAlerts()]).then(([unread, all]) => {
+      if (!active) return
+      setAlerts(unread)
+      setRecentTriggers(all)
+    }).catch(() => {})
     loadAlerts()
     api.rules().then((items) => active && setRules(items)).catch(() => {})
     const interval = window.setInterval(loadAlerts, 30_000)
@@ -412,6 +419,7 @@ function App() {
 
   const returns = useMemo(() => backtest?.result_summary?.average_forward_returns || {}, [backtest])
   const selectedRule = useMemo(() => rules.find((rule) => rule.id === ruleId) || null, [rules, ruleId])
+  const currentTrigger = recentTriggers[triggerIndex] || null
   const marketBySymbol = useMemo(() => (
     [...market.indexes, ...market.gainers, ...market.losers, ...favoriteQuotes].reduce((items, item) => {
       const previous = items[item.symbol]
@@ -451,6 +459,10 @@ function App() {
   useEffect(() => {
     if (!ruleId && rules.length) setRuleId(rules[0].id)
   }, [rules, ruleId])
+
+  useEffect(() => {
+    setTriggerIndex((current) => Math.min(current, Math.max(0, recentTriggers.length - 1)))
+  }, [recentTriggers.length])
 
   async function refreshMarket() {
     setBusy('market-refresh')
@@ -893,15 +905,9 @@ function App() {
         </article>
 
         <aside className="panel alert-card">
-          <div className="panel-heading"><div><span className="step">05</span><h2>Live alerts</h2></div><span className="count">{alerts.length || 1}</span></div>
-          {(alerts.length ? alerts : [{ id: 'demo', symbol: 'NVDA', market_timestamp: '2026-07-22T20:00:00Z', rule_version: 1 }]).map((alert) => (
-            <div className="alert" key={alert.id}>
-              <div className="alert-top"><span className="pulse" /><strong>{alert.symbol}</strong><time>{new Date(alert.market_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>
-              <h3>High-volume breakdown</h3>
-              <p>Price crossed below SMA20 while volume exceeded the 20-day average by 2×.</p>
-              <div><span>RULE v{alert.rule_version}</span>{alert.id !== 'demo' && <button onClick={() => api.acknowledge(alert.id).then(() => setAlerts((items) => items.filter((item) => item.id !== alert.id)))}>Acknowledge</button>}</div>
-            </div>
-          ))}
+          <div className="panel-heading"><div><span className="step">05</span><h2>Recent Triggers</h2></div><span className="count">{recentTriggers.length}</span></div>
+          {currentTrigger ? <div className="trigger-view"><div className="alert-top"><span className="pulse" /><strong>{currentTrigger.symbol}</strong><time>{new Date(currentTrigger.market_timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time></div><h3>{rules.find((rule) => rule.id === currentTrigger.rule_id)?.name || `${currentTrigger.symbol} alert`}</h3><p>{currentTrigger.explanation?.conditions?.map((condition) => condition.reason).filter(Boolean).join(' · ') || 'The stored rule conditions evaluated to true.'}</p><div className="trigger-meta"><span>RULE v{currentTrigger.rule_version} · {currentTrigger.timeframe.toUpperCase()}</span><b>{currentTrigger.acknowledged ? 'READ' : 'UNREAD'}</b></div></div> : <div className="trigger-empty">NO RULE TRIGGERS YET</div>}
+          <div className="trigger-pagination"><button disabled={triggerIndex === 0} onClick={() => setTriggerIndex((value) => value - 1)}>← NEWER</button><span>{recentTriggers.length ? `${triggerIndex + 1} / ${recentTriggers.length}` : '0 / 0'}</span><button disabled={triggerIndex >= recentTriggers.length - 1} onClick={() => setTriggerIndex((value) => value + 1)}>OLDER →</button></div>
           <div className="event-route"><span>KAFKA</span><b>→</b><span>ENGINE</span><b>→</b><span>ALERT</span></div>
         </aside>
       </section>

@@ -54,6 +54,7 @@ export const api = {
     body: JSON.stringify({ rule_id: ruleId, start, end }),
   }),
   alerts: () => request('/alerts?acknowledged=false'),
+  allAlerts: () => request('/alerts'),
   acknowledge: (id) => request(`/alerts/${id}/acknowledge`, { method: 'POST' }),
   quote: (symbol) => request(`/prices/latest?symbol=${encodeURIComponent(symbol)}`),
   searchStocks: (query) => request(`/stocks/search?q=${encodeURIComponent(query)}`),
