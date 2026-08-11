@@ -125,7 +125,7 @@ function MoverList({ title, items, tone, page, setPage, selectedSymbol, selectSy
   )
 }
 
-function MarketChart({ symbol, displayName, period, setPeriod, data, message, averages, setAverages, compact = false }) {
+function MarketChart({ symbol, displayName, period, setPeriod, data, message, averages, setAverages, compact = false, emphasizeTicker = false }) {
   const [zoomLevel, setZoomLevel] = useState(0)
   const [yStretch, setYStretch] = useState(0)
   const [panOffset, setPanOffset] = useState(0)
@@ -188,7 +188,7 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
   return (
     <section className={`stock-chart-panel panel ${compact ? 'compact-chart' : ''}`} id={compact ? 'dashboard-chart' : 'stock-chart'}>
       <div className="chart-header">
-        <div className="chart-symbol"><span>SELECTED MARKET</span><h2>{displayName || symbol}</h2>{displayName && displayName !== symbol && <p>{symbol}</p>}</div>
+        <div className={`chart-symbol ${emphasizeTicker ? 'ticker-emphasis' : ''}`}><span>SELECTED MARKET</span><h2>{emphasizeTicker ? symbol : displayName || symbol}</h2>{displayName && displayName !== symbol && <p>{emphasizeTicker ? displayName : symbol}</p>}</div>
         <div className="chart-controls">
           <div className="interval-switcher" aria-label="Chart period">
             {CHART_PERIODS.map(([value, label]) => <button className={period === value ? 'active' : ''} key={value} onClick={() => setPeriod(value)}>{label}</button>)}
@@ -772,7 +772,7 @@ function App() {
             )}
           </div>
           <div className="favorite-chart-stack">
-            <MarketChart symbol={selectedSymbol} displayName={favoriteDetail?.name || marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
+            <MarketChart symbol={selectedSymbol} displayName={favoriteDetail?.name || marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact emphasizeTicker />
             <div className="favorite-market-stats panel">{[
               ['OPEN', favoriteDetail?.open, 'price'], ['PREVIOUS CLOSE', favoriteDetail?.previous_close, 'price'], ['DAY HIGH', favoriteDetail?.day_high, 'price'], ['DAY LOW', favoriteDetail?.day_low, 'price'], ['VOLUME', favoriteDetail?.volume, 'number'], ['MARKET CAP', favoriteDetail?.market_cap, 'compact'], ['52W HIGH', favoriteDetail?.fifty_two_week_high, 'price'], ['52W LOW', favoriteDetail?.fifty_two_week_low, 'price'],
             ].map(([label, value, format]) => <div key={label}><span>{label}</span><strong>{value == null ? '—' : format === 'price' ? `$${Number(value).toFixed(2)}` : format === 'compact' ? Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(value) : Number(value).toLocaleString()}</strong></div>)}</div>
