@@ -247,6 +247,7 @@ function App() {
   const [ruleId, setRuleId] = useState('')
   const [backtest, setBacktest] = useState(SAMPLE_BACKTEST)
   const [alerts, setAlerts] = useState([])
+  const [rules, setRules] = useState([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [tracked, setTracked] = useState([])
   const [market, setMarket] = useState({ indexes: [], gainers: [], losers: [], sectors: [], scope: 'Active US-listed stocks', market_state: 'CLOSED', updated_at: null, data_source: 'yfinance', data_status: 'live' })
@@ -288,12 +289,14 @@ function App() {
   useEffect(() => {
     if (!user) {
       setAlerts([])
+      setRules([])
       setNotificationsOpen(false)
       return undefined
     }
     let active = true
     const loadAlerts = () => api.alerts().then((items) => active && setAlerts(items)).catch(() => {})
     loadAlerts()
+    api.rules().then((items) => active && setRules(items)).catch(() => {})
     const interval = window.setInterval(loadAlerts, 30_000)
     return () => {
       active = false
@@ -550,6 +553,7 @@ function App() {
     try {
       const rule = await api.createRule(`${definition.symbol} signal`, definition)
       setRuleId(rule.id)
+      setRules((items) => [rule, ...items.filter((item) => item.id !== rule.id)])
       setMessage(`Rule v${rule.version} activated`)
     } catch (error) {
       setMessage(error.message)
@@ -570,6 +574,29 @@ function App() {
       setMessage(`Backtest completed - ${result.trigger_count} signal found`)
     } catch (error) {
       setMessage(error.message)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function toggleRule(rule) {
+    setBusy(`rule-${rule.id}`)
+    try {
+      const updated = await api.setRuleEnabled(rule.id, !rule.enabled)
+      setRules((items) => items.map((item) => item.id === updated.id ? updated : item))
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function removeRule(rule) {
+    if (!window.confirm(`Delete ${rule.name}? This also removes its alert history.`)) return
+    setBusy(`rule-${rule.id}`)
+    try {
+      await api.deleteRule(rule.id)
+      setRules((items) => items.filter((item) => item.id !== rule.id))
+      setAlerts((items) => items.filter((item) => item.rule_id !== rule.id))
+      if (ruleId === rule.id) setRuleId('')
     } finally {
       setBusy('')
     }
@@ -846,10 +873,15 @@ function App() {
         </article>
       </section>
 
+      <section className="rule-management panel">
+        <div className="panel-heading"><div><span className="step">03</span><h2>My Alerts</h2></div><span className="count">{rules.length}</span></div>
+        {user ? (rules.length ? <div className="rule-list">{rules.map((rule) => <article key={rule.id}><div className={`rule-state ${rule.enabled ? 'enabled' : 'paused'}`}><i />{rule.enabled ? 'ENABLED' : 'PAUSED'}</div><div className="rule-identity"><strong>{rule.name}</strong><span>{rule.definition.symbol} · {rule.definition.timeframe.toUpperCase()} · {rule.definition.conditions.all.length} CONDITION{rule.definition.conditions.all.length === 1 ? '' : 'S'}</span></div><div className="rule-actions"><button onClick={() => toggleRule(rule)} disabled={busy === `rule-${rule.id}`}>{rule.enabled ? 'PAUSE' : 'ENABLE'}</button><button className="danger" onClick={() => removeRule(rule)} disabled={busy === `rule-${rule.id}`}>DELETE</button></div></article>)}</div> : <div className="rule-empty">NO PERSONAL ALERTS YET · ACTIVATE A VALIDATED RULE ABOVE</div>) : <div className="rule-empty">SIGN IN TO MANAGE YOUR ALERTS</div>}
+      </section>
+
       <section className="results">
         <article className="panel backtest-card">
           <div className="panel-heading">
-            <div><span className="step">03</span><h2>Historical replay</h2></div>
+            <div><span className="step">04</span><h2>Historical replay</h2></div>
             <button className="run" onClick={runBacktest} disabled={Boolean(busy)}>{busy === 'backtest' ? 'Running…' : 'Run backtest ↗'}</button>
           </div>
           <div className="metrics-row">
@@ -869,7 +901,7 @@ function App() {
         </article>
 
         <aside className="panel alert-card">
-          <div className="panel-heading"><div><span className="step">04</span><h2>Live alerts</h2></div><span className="count">{alerts.length || 1}</span></div>
+          <div className="panel-heading"><div><span className="step">05</span><h2>Live alerts</h2></div><span className="count">{alerts.length || 1}</span></div>
           {(alerts.length ? alerts : [{ id: 'demo', symbol: 'NVDA', market_timestamp: '2026-07-22T20:00:00Z', rule_version: 1 }]).map((alert) => (
             <div className="alert" key={alert.id}>
               <div className="alert-top"><span className="pulse" /><strong>{alert.symbol}</strong><time>{new Date(alert.market_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>

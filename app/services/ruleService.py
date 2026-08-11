@@ -1,6 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.models.Alert import Alert
 from app.models.Rule import Rule, RuleVersion
 from app.schemas.rule import RuleCreate, RuleResponse, RuleUpdate, RuleVersionResponse
 
@@ -23,18 +24,22 @@ def create_rule(request: RuleCreate, session: Session, user_id: str | None = Non
     return _to_response(rule, rule.versions[0])
 
 
-def list_rules(session: Session) -> list[RuleResponse]:
+def list_rules(session: Session, user_id: str | None = None) -> list[RuleResponse]:
+    statement = select(Rule).options(selectinload(Rule.versions)).order_by(Rule.created_at)
+    if user_id is not None:
+        statement = statement.where(Rule.user_id == user_id)
     rules = session.execute(
-        select(Rule).options(selectinload(Rule.versions)).order_by(Rule.created_at)
+        statement
     ).scalars()
     return [_to_response(rule, _current_version(rule)) for rule in rules]
 
 
-def get_rule(rule_id: str, session: Session) -> RuleResponse | None:
+def get_rule(rule_id: str, session: Session, user_id: str | None = None) -> RuleResponse | None:
+    statement = select(Rule).where(Rule.id == rule_id).options(selectinload(Rule.versions))
+    if user_id is not None:
+        statement = statement.where(Rule.user_id == user_id)
     rule = session.execute(
-        select(Rule)
-        .where(Rule.id == rule_id)
-        .options(selectinload(Rule.versions))
+        statement
     ).scalar_one_or_none()
     if rule is None:
         return None
@@ -45,11 +50,13 @@ def update_rule(
     rule_id: str,
     request: RuleUpdate,
     session: Session,
+    user_id: str | None = None,
 ) -> RuleResponse | None:
+    statement = select(Rule).where(Rule.id == rule_id).options(selectinload(Rule.versions))
+    if user_id is not None:
+        statement = statement.where(Rule.user_id == user_id)
     rule = session.execute(
-        select(Rule)
-        .where(Rule.id == rule_id)
-        .options(selectinload(Rule.versions))
+        statement
     ).scalar_one_or_none()
     if rule is None:
         return None
@@ -73,11 +80,13 @@ def update_rule(
 def list_rule_versions(
     rule_id: str,
     session: Session,
+    user_id: str | None = None,
 ) -> list[RuleVersionResponse] | None:
+    statement = select(Rule).where(Rule.id == rule_id).options(selectinload(Rule.versions))
+    if user_id is not None:
+        statement = statement.where(Rule.user_id == user_id)
     rule = session.execute(
-        select(Rule)
-        .where(Rule.id == rule_id)
-        .options(selectinload(Rule.versions))
+        statement
     ).scalar_one_or_none()
     if rule is None:
         return None
@@ -91,11 +100,13 @@ def set_rule_enabled(
     rule_id: str,
     enabled: bool,
     session: Session,
+    user_id: str | None = None,
 ) -> RuleResponse | None:
+    statement = select(Rule).where(Rule.id == rule_id).options(selectinload(Rule.versions))
+    if user_id is not None:
+        statement = statement.where(Rule.user_id == user_id)
     rule = session.execute(
-        select(Rule)
-        .where(Rule.id == rule_id)
-        .options(selectinload(Rule.versions))
+        statement
     ).scalar_one_or_none()
     if rule is None:
         return None
@@ -103,6 +114,19 @@ def set_rule_enabled(
     session.commit()
     session.refresh(rule)
     return _to_response(rule, _current_version(rule))
+
+
+def delete_rule(rule_id: str, session: Session, user_id: str | None = None) -> bool:
+    statement = select(Rule).where(Rule.id == rule_id)
+    if user_id is not None:
+        statement = statement.where(Rule.user_id == user_id)
+    rule = session.execute(statement).scalar_one_or_none()
+    if rule is None:
+        return False
+    session.query(Alert).filter(Alert.rule_id == rule.id).delete(synchronize_session=False)
+    session.delete(rule)
+    session.commit()
+    return True
 
 
 def _current_version(rule: Rule) -> RuleVersion:

@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.api.ruleRouter import router
+from app.api.auth_router import require_current_user
 from app.core.config import Base, get_db
 from app.models.Rule import Rule, RuleVersion
 
@@ -28,6 +29,7 @@ def create_client():
             db.close()
 
     app.dependency_overrides[get_db] = test_db
+    app.dependency_overrides[require_current_user] = lambda: type("TestUser", (), {"id": "user-1"})()
     return TestClient(app)
 
 
@@ -86,6 +88,21 @@ def test_returns_404_for_unknown_rule():
     response = client.get("/rules/missing")
 
     assert response.status_code == 404
+
+
+def test_pauses_resumes_and_deletes_owned_rule():
+    client = create_client()
+    created = client.post("/rules", json=rule_payload()).json()
+
+    paused = client.patch(f"/rules/{created['id']}/status", json={"enabled": False})
+    assert paused.status_code == 200
+    assert paused.json()["enabled"] is False
+
+    resumed = client.patch(f"/rules/{created['id']}/status", json={"enabled": True})
+    assert resumed.json()["enabled"] is True
+
+    assert client.delete(f"/rules/{created['id']}").status_code == 204
+    assert client.get("/rules").json() == []
 
 
 def test_update_creates_new_version_without_overwriting_history():
