@@ -9,6 +9,7 @@ from app.models.PollTask import PollTask
 from app.models.RawPrice import RawPrice
 from app.models.Rule import Rule, RuleVersion
 from app.models.BacktestRun import BacktestRun
+from app.models.Alert import Alert
 
 
 config = context.config
