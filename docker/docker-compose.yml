@@ -51,6 +51,15 @@ services:
       timeout: 10s
       retries: 12
 
+  kafka-init:
+    image: confluentinc/cp-kafka:7.4.0
+    command: >-
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists
+      --topic market-events --partitions 3 --replication-factor 1
+    depends_on:
+      kafka:
+        condition: service_healthy
+
   api:
     build:
       context: ..
@@ -97,6 +106,8 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
 
   closing-snapshot-worker:
     build:
@@ -117,6 +128,8 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
 
   frontend:
     build:
