@@ -68,6 +68,16 @@ def current_user(
     return user
 
 
+def require_current_user(
+    signalforge_session: str | None = Cookie(default=None),
+    db: Session = Depends(get_db),
+) -> User:
+    user = find_session_user(db, signalforge_session)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Sign in to continue")
+    return user
+
+
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(
     response: Response,

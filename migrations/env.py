@@ -13,6 +13,7 @@ from app.models.Alert import Alert
 from app.models.MarketBar import MarketBar
 from app.models.WatchlistItem import WatchlistItem
 from app.models.User import User, UserSession
+from app.models.Favorite import Favorite
 
 
 config = context.config
