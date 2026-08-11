@@ -4,6 +4,7 @@ from app.models.RawPrice import RawPrice
 from app.models.PollTask import PollTask
 from app.models.Rule import Rule, RuleVersion
 from app.api.priceRouter import router as prices_router
+from app.api.ruleRouter import router as rules_router
 from app.core.config import Base, engine
 import logging
 from app.core.config import redis
@@ -50,4 +51,4 @@ logging.basicConfig(
 #     return {"message": "Hello World"}
 
 app.include_router(prices_router)
-
+app.include_router(rules_router)
