@@ -399,8 +399,13 @@ function App() {
   }, [search, suggestionsOpen])
 
   const returns = useMemo(() => backtest?.result_summary?.average_forward_returns || {}, [backtest])
-  const marketBySymbol = useMemo(() => Object.fromEntries(
-    [...market.indexes, ...market.gainers, ...market.losers, ...favoriteQuotes].map((item) => [item.symbol, item]),
+  const marketBySymbol = useMemo(() => (
+    [...market.indexes, ...market.gainers, ...market.losers, ...favoriteQuotes].reduce((items, item) => {
+      const previous = items[item.symbol]
+      const resolvedName = item.name && item.name !== item.symbol ? item.name : previous?.name
+      items[item.symbol] = { ...previous, ...item, name: resolvedName || item.symbol }
+      return items
+    }, {})
   ), [market, favoriteQuotes])
   const rankedSectors = useMemo(
     () => [...market.sectors].sort((left, right) => (right.change_percent ?? -Infinity) - (left.change_percent ?? -Infinity)),
@@ -692,12 +697,7 @@ function App() {
               <MoverList title="TOP LOSERS" items={market.losers} tone="down" page={moverPages.losers} setPage={(nextPage) => setMoverPages((pages) => ({ ...pages, losers: nextPage }))} selectedSymbol={selectedSymbol} selectSymbol={navigateStock} previewSymbol={previewSymbolLater} cancelPreview={cancelSymbolPreview} tracked={tracked} trackSymbol={trackSymbol} untrackSymbol={untrackSymbol} />
             </div>
           </div>
-          <div className="favorite-chart-stack">
-            <MarketChart symbol={selectedSymbol} displayName={favoriteDetail?.name || marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
-            {favoriteDetail && <div className="favorite-market-stats panel">{[
-              ['OPEN', favoriteDetail.open, 'price'], ['PREVIOUS CLOSE', favoriteDetail.previous_close, 'price'], ['DAY HIGH', favoriteDetail.day_high, 'price'], ['DAY LOW', favoriteDetail.day_low, 'price'], ['VOLUME', favoriteDetail.volume, 'number'], ['MARKET CAP', favoriteDetail.market_cap, 'compact'], ['52W HIGH', favoriteDetail.fifty_two_week_high, 'price'], ['52W LOW', favoriteDetail.fifty_two_week_low, 'price'],
-            ].map(([label, value, format]) => <div key={label}><span>{label}</span><strong>{value == null ? '—' : format === 'price' ? `$${Number(value).toFixed(2)}` : format === 'compact' ? Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(value) : Number(value).toLocaleString()}</strong></div>)}</div>}
-          </div>
+          <MarketChart symbol={selectedSymbol} displayName={marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
         </div>
         <section className="sector-panel panel">
           <div className="sector-heading"><div><p className="eyebrow">SECTOR ETF PROXY</p><h3>Sector performance</h3></div><span>RANKED HIGH TO LOW · CLICK TO EXPLORE</span></div>
@@ -771,7 +771,12 @@ function App() {
               </div><div className="favorite-pagination"><button disabled={favoritePage === 0} onClick={() => setFavoritePage((value) => value - 1)}>←</button><span>{favoritePage + 1} / {favoritePageCount}</span><button disabled={favoritePage >= favoritePageCount - 1} onClick={() => setFavoritePage((value) => value + 1)}>→</button></div></>
             )}
           </div>
-          <MarketChart symbol={selectedSymbol} displayName={marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
+          <div className="favorite-chart-stack">
+            <MarketChart symbol={selectedSymbol} displayName={favoriteDetail?.name || marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
+            <div className="favorite-market-stats panel">{[
+              ['OPEN', favoriteDetail?.open, 'price'], ['PREVIOUS CLOSE', favoriteDetail?.previous_close, 'price'], ['DAY HIGH', favoriteDetail?.day_high, 'price'], ['DAY LOW', favoriteDetail?.day_low, 'price'], ['VOLUME', favoriteDetail?.volume, 'number'], ['MARKET CAP', favoriteDetail?.market_cap, 'compact'], ['52W HIGH', favoriteDetail?.fifty_two_week_high, 'price'], ['52W LOW', favoriteDetail?.fifty_two_week_low, 'price'],
+            ].map(([label, value, format]) => <div key={label}><span>{label}</span><strong>{value == null ? '—' : format === 'price' ? `$${Number(value).toFixed(2)}` : format === 'compact' ? Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(value) : Number(value).toLocaleString()}</strong></div>)}</div>
+          </div>
       </section>
       <section className="favorite-news panel">
         <div className="favorite-news-heading"><div><p className="eyebrow">YOUR WATCHLIST · LATEST COVERAGE</p><h2>Favorites News</h2></div><span>{favoriteNews.length} STORIES</span></div>
