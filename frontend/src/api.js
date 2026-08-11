@@ -26,6 +26,7 @@ export const api = {
   }),
   logout: () => request('/auth/logout', { method: 'POST' }),
   marketOverview: (refresh = false) => request(`/market/overview${refresh ? '?refresh=true' : ''}`),
+  sectorStocks: (sector, page = 1) => request(`/market/sectors/${encodeURIComponent(sector)}/stocks?page=${page}&page_size=10`),
   marketQuotes: (symbols) => request(`/market/quotes?symbols=${encodeURIComponent(symbols.join(','))}`),
   favorites: () => request('/favorites'),
   addFavorite: (symbol) => request('/favorites', {

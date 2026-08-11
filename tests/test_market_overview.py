@@ -70,3 +70,32 @@ def test_screener_snapshots_recompute_change_from_current_and_previous_prices():
     assert snapshots[0]["change"] == 10
     assert snapshots[0]["change_percent"] == 10
     assert snapshots[0]["sparkline"] == [100, 110]
+
+
+def test_sector_stocks_are_paginated_by_the_api():
+    result = {
+        "sector": "Technology",
+        "slug": "technology",
+        "page": 2,
+        "page_size": 10,
+        "total": 42,
+        "stocks": [{"symbol": "NVDA", "name": "NVIDIA", "price": 190, "change": 5, "change_percent": 2.7, "sparkline": [185, 190]}],
+        "updated_at": None,
+    }
+    app = FastAPI()
+    app.include_router(router)
+    with patch("app.api.market_router.fetch_sector_stocks", new=AsyncMock(return_value=result)) as fetch:
+        response = TestClient(app).get("/market/sectors/technology/stocks?page=2&page_size=10")
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 42
+    fetch.assert_awaited_once_with("technology", 2, 10)
+
+
+def test_unknown_sector_returns_not_found():
+    app = FastAPI()
+    app.include_router(router)
+    with patch("app.api.market_router.fetch_sector_stocks", new=AsyncMock(side_effect=KeyError)):
+        response = TestClient(app).get("/market/sectors/not-real/stocks")
+
+    assert response.status_code == 404

@@ -12,10 +12,25 @@ class MarketSnapshot(BaseModel):
     sparkline: list[float]
 
 
+class SectorSnapshot(MarketSnapshot):
+    slug: str
+
+
 class MarketOverview(BaseModel):
     indexes: list[MarketSnapshot]
     gainers: list[MarketSnapshot]
     losers: list[MarketSnapshot]
+    sectors: list[SectorSnapshot] = []
     scope: str = "Active US-listed stocks"
     market_state: str = "CLOSED"
+    updated_at: datetime | None = None
+
+
+class SectorStocksResponse(BaseModel):
+    sector: str
+    slug: str
+    page: int
+    page_size: int
+    total: int
+    stocks: list[MarketSnapshot]
     updated_at: datetime | None = None

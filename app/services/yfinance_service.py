@@ -30,6 +30,19 @@ MARKET_INDEXES = {
     "^DJI": "Dow Jones",
     "^RUT": "Russell 2000",
 }
+SECTOR_ETFS = {
+    "technology": ("Technology", "XLK"),
+    "financial-services": ("Financial Services", "XLF"),
+    "healthcare": ("Healthcare", "XLV"),
+    "consumer-cyclical": ("Consumer Cyclical", "XLY"),
+    "communication-services": ("Communication Services", "XLC"),
+    "industrials": ("Industrials", "XLI"),
+    "consumer-defensive": ("Consumer Defensive", "XLP"),
+    "energy": ("Energy", "XLE"),
+    "basic-materials": ("Basic Materials", "XLB"),
+    "real-estate": ("Real Estate", "XLRE"),
+    "utilities": ("Utilities", "XLU"),
+}
 MARKET_OVERVIEW_CACHE_SECONDS = 60
 _market_overview_cache: tuple[float, dict] | None = None
 
@@ -225,14 +238,16 @@ async def fetch_market_overview(force_refresh: bool = False) -> dict:
     if not force_refresh and _market_overview_cache and now - _market_overview_cache[0] < MARKET_OVERVIEW_CACHE_SECONDS:
         return _market_overview_cache[1]
 
-    indexes, movers = await asyncio.gather(
+    indexes, movers, sectors = await asyncio.gather(
         fetch_market_snapshots(list(MARKET_INDEXES)),
         fetch_market_movers(),
+        fetch_sector_performance(),
     )
     overview = {
         "indexes": indexes,
         "gainers": movers["gainers"],
         "losers": movers["losers"],
+        "sectors": sectors,
         "scope": "Active US-listed stocks (Nasdaq, NYSE, NYSE American; price $1+, volume 100K+)",
         "market_state": movers["market_state"],
         "updated_at": movers["updated_at"],
@@ -243,15 +258,7 @@ async def fetch_market_overview(force_refresh: bool = False) -> dict:
 
 async def fetch_market_movers() -> dict:
     def load_screens():
-        query = yf.EquityQuery(
-            "and",
-            [
-                yf.EquityQuery("eq", ["region", "us"]),
-                yf.EquityQuery("is-in", ["exchange", "NMS", "NGM", "NCM", "NYQ", "ASE"]),
-                yf.EquityQuery("gte", ["intradayprice", 1]),
-                yf.EquityQuery("gte", ["dayvolume", 100_000]),
-            ],
-        )
+        query = active_us_equity_query()
         return (
             yf.screen(query, size=50, sortField="percentchange", sortAsc=False),
             yf.screen(query, size=50, sortField="percentchange", sortAsc=True),
@@ -271,6 +278,60 @@ async def fetch_market_movers() -> dict:
         "losers": losers[:50],
         "market_state": "OPEN" if any(quote.get("marketState") == "REGULAR" for quote in quotes) else "CLOSED",
         "updated_at": datetime.fromtimestamp(max(timestamps), tz=timezone.utc) if timestamps else datetime.now(timezone.utc),
+    }
+
+
+def active_us_equity_query(*extra_conditions):
+    return yf.EquityQuery(
+        "and",
+        [
+            yf.EquityQuery("eq", ["region", "us"]),
+            yf.EquityQuery("is-in", ["exchange", "NMS", "NGM", "NCM", "NYQ", "ASE"]),
+            yf.EquityQuery("gte", ["intradayprice", 1]),
+            yf.EquityQuery("gte", ["dayvolume", 100_000]),
+            *extra_conditions,
+        ],
+    )
+
+
+async def fetch_sector_performance() -> list[dict]:
+    by_symbol = {symbol: (slug, name) for slug, (name, symbol) in SECTOR_ETFS.items()}
+    snapshots = await fetch_market_snapshots(list(by_symbol))
+    sectors = [
+        {**snapshot, "slug": by_symbol[snapshot["symbol"]][0], "name": by_symbol[snapshot["symbol"]][1]}
+        for snapshot in snapshots
+        if snapshot["symbol"] in by_symbol
+    ]
+    return sorted(sectors, key=lambda item: item["change_percent"], reverse=True)
+
+
+async def fetch_sector_stocks(sector_slug: str, page: int, page_size: int) -> dict:
+    sector_name, _ = SECTOR_ETFS[sector_slug]
+    query = active_us_equity_query(yf.EquityQuery("eq", ["sector", sector_name]))
+
+    def load_screen():
+        return yf.screen(
+            query,
+            offset=(page - 1) * page_size,
+            size=page_size,
+            sortField="percentchange",
+            sortAsc=False,
+        )
+
+    try:
+        screen = await asyncio.to_thread(load_screen)
+    except Exception as exc:
+        raise ValueError(f"yfinance sector screener error: {exc}") from exc
+    quotes = screen.get("quotes", [])
+    timestamps = [quote.get("regularMarketTime") for quote in quotes if quote.get("regularMarketTime")]
+    return {
+        "sector": sector_name,
+        "slug": sector_slug,
+        "page": page,
+        "page_size": page_size,
+        "total": screen.get("total", 0),
+        "stocks": build_screener_snapshots(quotes, descending=True),
+        "updated_at": datetime.fromtimestamp(max(timestamps), tz=timezone.utc) if timestamps else None,
     }
 
 

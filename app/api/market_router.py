@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 
-from app.schemas.market import MarketOverview
-from app.services.yfinance_service import fetch_market_overview, fetch_market_snapshots
+from app.schemas.market import MarketOverview, SectorStocksResponse
+from app.services.yfinance_service import fetch_market_overview, fetch_market_snapshots, fetch_sector_stocks
 
 
 router = APIRouter(prefix="/market", tags=["market"])
@@ -11,6 +11,20 @@ router = APIRouter(prefix="/market", tags=["market"])
 async def market_overview(refresh: bool = Query(default=False)):
     try:
         return await fetch_market_overview(force_refresh=refresh)
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@router.get("/sectors/{sector_slug}/stocks", response_model=SectorStocksResponse)
+async def sector_stocks(
+    sector_slug: str,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=50),
+):
+    try:
+        return await fetch_sector_stocks(sector_slug, page, page_size)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Unknown sector: {sector_slug}")
     except ValueError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 

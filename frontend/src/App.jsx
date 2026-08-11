@@ -160,8 +160,10 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
 function App() {
   const [page, setPage] = useState(() => {
     const route = window.location.pathname.replace(/^\//, '')
+    if (route.startsWith('sectors/')) return 'sector'
     return ['dashboard', 'favorites', 'rule-studio'].includes(route) ? route : 'dashboard'
   })
+  const [sectorSlug, setSectorSlug] = useState(() => window.location.pathname.startsWith('/sectors/') ? window.location.pathname.split('/')[2] : '')
   const [user, setUser] = useState(null)
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState('login')
@@ -175,8 +177,10 @@ function App() {
   const [backtest, setBacktest] = useState(SAMPLE_BACKTEST)
   const [alerts, setAlerts] = useState([])
   const [tracked, setTracked] = useState([])
-  const [market, setMarket] = useState({ indexes: [], gainers: [], losers: [], scope: 'Active US-listed stocks', market_state: 'CLOSED', updated_at: null })
+  const [market, setMarket] = useState({ indexes: [], gainers: [], losers: [], sectors: [], scope: 'Active US-listed stocks', market_state: 'CLOSED', updated_at: null })
   const [moverPages, setMoverPages] = useState({ gainers: 0, losers: 0 })
+  const [sectorStocks, setSectorStocks] = useState({ sector: '', page: 1, page_size: 10, total: 0, stocks: [], updated_at: null })
+  const [sectorPage, setSectorPage] = useState(1)
   const [favoriteQuotes, setFavoriteQuotes] = useState([])
   const [favoriteSort, setFavoriteSort] = useState('change_desc')
   const [search, setSearch] = useState('NVDA')
@@ -204,11 +208,25 @@ function App() {
   useEffect(() => {
     const handleNavigation = () => {
       const route = window.location.pathname.replace(/^\//, '')
-      setPage(['dashboard', 'favorites', 'rule-studio'].includes(route) ? route : 'dashboard')
+      if (route.startsWith('sectors/')) {
+        setSectorSlug(route.split('/')[1])
+        setPage('sector')
+      } else {
+        setPage(['dashboard', 'favorites', 'rule-studio'].includes(route) ? route : 'dashboard')
+      }
     }
     window.addEventListener('popstate', handleNavigation)
     return () => window.removeEventListener('popstate', handleNavigation)
   }, [])
+
+  useEffect(() => {
+    if (page !== 'sector' || !sectorSlug) return
+    setBusy('sector')
+    api.sectorStocks(sectorSlug, sectorPage)
+      .then(setSectorStocks)
+      .catch(() => setSectorStocks({ sector: sectorSlug, page: sectorPage, page_size: 10, total: 0, stocks: [], updated_at: null }))
+      .finally(() => setBusy(''))
+  }, [page, sectorSlug, sectorPage])
 
   useEffect(() => {
     if (user) api.favorites().then(setTracked).catch(() => setTracked([]))
@@ -284,6 +302,14 @@ function App() {
   function navigate(nextPage) {
     window.history.pushState({}, '', `/${nextPage}`)
     setPage(nextPage)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function navigateSector(slug) {
+    window.history.pushState({}, '', `/sectors/${slug}`)
+    setSectorSlug(slug)
+    setSectorPage(1)
+    setPage('sector')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -490,6 +516,21 @@ function App() {
             </div>
           </div>
           <MarketChart symbol={selectedSymbol} displayName={marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
+        </div>
+        <section className="sector-panel panel">
+          <div className="sector-heading"><div><p className="eyebrow">SECTOR ETF PROXY</p><h3>Sector performance</h3></div><span>11 US MARKET SECTORS · CLICK TO EXPLORE</span></div>
+          <div className="sector-grid">{market.sectors.map((sector, index) => <button key={sector.slug} onClick={() => navigateSector(sector.slug)}><span>{String(index + 1).padStart(2, '0')}</span><div><strong>{sector.name}</strong><small>{sector.symbol}</small></div><b className={sector.change_percent >= 0 ? 'up' : 'down'}>{sector.change_percent >= 0 ? '+' : ''}{sector.change_percent.toFixed(2)}%</b></button>)}</div>
+        </section>
+      </section>}
+
+      {page === 'sector' && <section className="sector-page page-surface">
+        <button className="back-link" onClick={() => navigate('dashboard')}>← BACK TO DASHBOARD</button>
+        <div className="section-intro"><div><p className="eyebrow">SECTOR CONSTITUENTS</p><h2>{sectorStocks.sector || sectorSlug.replaceAll('-', ' ')}</h2></div><div className="market-status"><p>Active US-listed stocks in this sector, ranked by daily percentage change.</p>{sectorStocks.updated_at && <span>UPDATED {new Date(sectorStocks.updated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>}</div></div>
+        <div className="sector-stock-table panel">
+          <div className="sector-stock-head"><span>RANK</span><span>SYMBOL</span><span>COMPANY</span><span>PRICE</span><span>DAILY CHANGE</span></div>
+          {busy === 'sector' ? <div className="sector-empty">LOADING SECTOR STOCKS…</div> : sectorStocks.stocks.map((stock, index) => <button key={stock.symbol} onClick={() => selectMarketSymbol(stock.symbol)}><span>{String(((sectorPage - 1) * 10) + index + 1).padStart(2, '0')}</span><strong>{stock.symbol}</strong><em>{stock.name}</em><span>${stock.price.toFixed(2)}</span><b className={stock.change_percent >= 0 ? 'up' : 'down'}>{stock.change_percent >= 0 ? '+' : ''}{stock.change_percent.toFixed(2)}%</b></button>)}
+          {!sectorStocks.stocks.length && busy !== 'sector' && <div className="sector-empty">NO STOCKS AVAILABLE</div>}
+          <div className="sector-pagination"><button disabled={sectorPage === 1 || busy === 'sector'} onClick={() => setSectorPage((value) => value - 1)}>← PREVIOUS</button><span>PAGE {sectorPage} / {Math.max(1, Math.ceil(sectorStocks.total / 10))} · {sectorStocks.total} STOCKS</span><button disabled={sectorPage >= Math.ceil(sectorStocks.total / 10) || busy === 'sector'} onClick={() => setSectorPage((value) => value + 1)}>NEXT →</button></div>
         </div>
       </section>}
 
