@@ -5,6 +5,7 @@ from app.core.config import Base
 from app.domain.events import MarketEvent
 from app.models.Alert import Alert
 from app.models.Rule import Rule, RuleVersion
+from app.models.User import User  # noqa: F401 - registers the referenced users table
 from app.services.live_rule_processor import LiveRuleProcessor
 
 
