@@ -72,11 +72,11 @@ function Condition({ item, index }) {
 const CHART_PERIODS = [['30m', '30 MIN'], ['60m', '60 MIN'], ['1d', 'DAILY'], ['1wk', 'WEEKLY'], ['1mo', 'MONTHLY']]
 const CHART_RANGE_BY_PERIOD = { '30m': '1mo', '60m': '1mo', '1d': '3mo', '1wk': '1y', '1mo': '1y' }
 
-function MarketChart({ symbol, interval, setInterval, data, message, averages, setAverages, compact = false }) {
+function MarketChart({ symbol, displayName, interval, setInterval, data, message, averages, setAverages, compact = false }) {
   return (
     <section className={`stock-chart-panel panel ${compact ? 'compact-chart' : ''}`} id={compact ? 'dashboard-chart' : 'stock-chart'}>
       <div className="chart-header">
-        <div className="chart-symbol"><span>SELECTED MARKET</span><h2>{symbol}</h2><p>{message}</p></div>
+        <div className="chart-symbol"><span>SELECTED MARKET</span><h2>{displayName || symbol}</h2><p>{displayName && displayName !== symbol ? `${symbol} · ${message}` : message}</p></div>
         <div className="chart-controls">
           <div className="interval-switcher" aria-label="Chart interval">
             {CHART_PERIODS.map(([value, label]) => <button className={interval === value ? 'active' : ''} key={value} onClick={() => setInterval(value)}>{label}</button>)}
@@ -424,7 +424,7 @@ function App() {
               {[['TOP GAINERS', market.gainers, 'up'], ['TOP LOSERS', market.losers, 'down']].map(([title, items, tone]) => <div className="mover-list" key={title}><h3>{title}<span>TOP 10</span></h3>{items.map((item, index) => <div className={`mover-row ${selectedSymbol === item.symbol ? 'selected' : ''}`} key={item.symbol} onClick={() => selectMarketSymbol(item.symbol)} role="button" tabIndex={0}><span>{String(index + 1).padStart(2, '0')}</span><strong>{item.symbol}</strong><em>${item.price.toFixed(2)}</em><b className={tone}>{item.change_percent >= 0 ? '+' : ''}{item.change_percent.toFixed(2)}%</b><button className={tracked.some((favorite) => favorite.symbol === item.symbol) ? 'star active' : 'star'} onClick={(event) => { event.stopPropagation(); tracked.some((favorite) => favorite.symbol === item.symbol) ? untrackSymbol(item.symbol) : trackSymbol(item.symbol) }} aria-label={`Toggle ${item.symbol} favorite`}>★</button></div>)}</div>)}
             </div>
           </div>
-          <MarketChart symbol={selectedSymbol} interval={chartInterval} setInterval={setChartInterval} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
+          <MarketChart symbol={selectedSymbol} displayName={marketBySymbol[selectedSymbol]?.name} interval={chartInterval} setInterval={setChartInterval} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
         </div>
       </section>}
 
