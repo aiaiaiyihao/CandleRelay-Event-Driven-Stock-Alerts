@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Area,
+  Bar,
   CartesianGrid,
   ComposedChart,
   Line,
@@ -99,7 +100,22 @@ function formatChartTimestamp(timestamp, interval, full = false) {
 
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
-  return <div className="chart-tooltip"><span>{payload[0].payload.tooltipDate || label}</span>{payload.map((item) => <div key={item.dataKey}><i style={{ background: item.color }} />{item.name}<strong>${Number(item.value).toFixed(2)}</strong></div>)}</div>
+  return <div className="chart-tooltip"><span>{payload[0].payload.tooltipDate || label}</span>{payload.map((item) => <div key={item.dataKey}><i style={{ background: item.color }} />{item.name}<strong>{item.dataKey === 'volume' ? Number(item.value).toLocaleString('en-US') : `$${Number(item.value).toFixed(2)}`}</strong></div>)}</div>
+}
+
+function Candlestick({ x, width, payload, background, domain }) {
+  if (!payload || !background || !domain.every(Number.isFinite)) return null
+  const [minimum, maximum] = domain
+  const range = Math.max(maximum - minimum, 0.000001)
+  const toY = (value) => background.y + ((maximum - value) / range) * background.height
+  const center = x + width / 2
+  const openY = toY(payload.open)
+  const closeY = toY(payload.close)
+  const color = payload.close >= payload.open ? '#5fd398' : '#ee7951'
+  const candleWidth = Math.max(2, Math.min(width * 0.72, 9))
+  const bodyTop = Math.min(openY, closeY)
+  const bodyHeight = Math.max(1.5, Math.abs(closeY - openY))
+  return <g className="candlestick"><line x1={center} x2={center} y1={toY(payload.high)} y2={toY(payload.low)} stroke={color} strokeWidth="1" /><rect x={center - candleWidth / 2} y={bodyTop} width={candleWidth} height={bodyHeight} fill={color} /></g>
 }
 
 function MoverList({ title, items, tone, page, setPage, selectedSymbol, selectSymbol, previewSymbol, cancelPreview, tracked, trackSymbol, untrackSymbol }) {
@@ -117,6 +133,7 @@ function MoverList({ title, items, tone, page, setPage, selectedSymbol, selectSy
 }
 
 function MarketChart({ symbol, displayName, period, setPeriod, data, message, averages, setAverages, compact = false, emphasizeTicker = false }) {
+  const [chartMode, setChartMode] = useState('line')
   const [zoomLevel, setZoomLevel] = useState(0)
   const [yStretch, setYStretch] = useState(0)
   const [panOffset, setPanOffset] = useState(0)
@@ -129,7 +146,7 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
   const visibleEnd = data.length - panOffset
   const visibleData = useMemo(() => data.slice(Math.max(0, visibleEnd - visibleCount), visibleEnd), [data, visibleCount, visibleEnd])
   const yDomain = useMemo(() => {
-    const keys = ['close', ...Object.keys(averages).filter((key) => averages[key])]
+    const keys = [chartMode === 'candle' ? ['open', 'high', 'low', 'close'] : ['close'], ...Object.keys(averages).filter((key) => averages[key])].flat()
     const values = visibleData.flatMap((point) => keys.map((key) => point[key]).filter((value) => Number.isFinite(value)))
     if (!values.length) return ['auto', 'auto']
     const minimum = Math.min(...values)
@@ -137,7 +154,7 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
     const range = Math.max(maximum - minimum, Math.abs(maximum) * 0.01, 1)
     const padding = range * yPaddingRatios[yStretch]
     return [minimum - padding, maximum + padding]
-  }, [visibleData, averages, yStretch])
+  }, [visibleData, averages, yStretch, chartMode])
 
   useEffect(() => {
     setZoomLevel(0)
@@ -181,6 +198,10 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
       <div className="chart-header">
         <div className={`chart-symbol ${emphasizeTicker ? 'ticker-emphasis' : ''}`}><span>SELECTED MARKET</span><h2>{emphasizeTicker ? symbol : displayName || symbol}</h2>{displayName && displayName !== symbol && <p>{emphasizeTicker ? displayName : symbol}</p>}</div>
         <div className="chart-controls">
+          <div className="chart-mode-switcher" aria-label="Chart type">
+            <button className={chartMode === 'line' ? 'active' : ''} onClick={() => setChartMode('line')}>LINE</button>
+            <button className={chartMode === 'candle' ? 'active' : ''} onClick={() => setChartMode('candle')}>CANDLE</button>
+          </div>
           <div className="interval-switcher" aria-label="Chart period">
             {CHART_PERIODS.map(([value, label]) => <button className={period === value ? 'active' : ''} key={value} onClick={() => setPeriod(value)}>{label}</button>)}
           </div>
@@ -207,8 +228,10 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
           <CartesianGrid stroke="#252728" vertical={false} />
           <XAxis dataKey="date" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} minTickGap={34} />
           <YAxis domain={yDomain} allowDataOverflow={false} orientation="right" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} width={52} tickFormatter={(value) => `$${Number(value).toFixed(0)}`} />
+          <YAxis yAxisId="volume" domain={[0, (maximum) => Math.max(maximum * 4.5, 1)]} hide />
           <Tooltip content={<ChartTooltip />} />
-          <Area type="monotone" dataKey="close" name="Price" stroke="#e9e7e1" strokeWidth={2} fill={`url(#${compact ? 'dashboardPriceFill' : 'favoritePriceFill'})`} dot={false} />
+          <Bar yAxisId="volume" dataKey="volume" name="Volume" fill="#5c6260" fillOpacity={0.42} maxBarSize={12} isAnimationActive={false} />
+          {chartMode === 'line' ? <Area type="monotone" dataKey="close" name="Price" stroke="#e9e7e1" strokeWidth={2} fill={`url(#${compact ? 'dashboardPriceFill' : 'favoritePriceFill'})`} dot={false} /> : <Bar dataKey="close" name="Price" fill="transparent" background={{ fill: 'transparent' }} shape={(props) => <Candlestick {...props} domain={yDomain} />} isAnimationActive={false} />}
           {averages.sma_20 && <Line type="monotone" dataKey="sma_20" name="SMA 20" stroke="#e76d2d" strokeWidth={1.5} dot={false} />}
           {averages.sma_50 && <Line type="monotone" dataKey="sma_50" name="SMA 50" stroke="#5fd398" strokeWidth={1.4} dot={false} />}
           {averages.sma_200 && <Line type="monotone" dataKey="sma_200" name="SMA 200" stroke="#8887d8" strokeWidth={1.4} dot={false} />}
