@@ -134,6 +134,10 @@ function App() {
   const [message, setMessage] = useState('Ready to compile')
 
   useEffect(() => {
+    if (window.location.pathname === '/') {
+      window.history.replaceState({}, '', '/dashboard')
+      setPage('dashboard')
+    }
     api.me().then(setUser).catch(() => {})
     api.marketOverview().then(setMarket).catch(() => {})
     api.alerts().then(setAlerts).catch(() => {})
