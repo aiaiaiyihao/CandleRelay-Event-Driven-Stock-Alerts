@@ -41,6 +41,8 @@ produce identical results. This behavior is covered by automated tests.
 - Email or phone registration with password hashing and server-side sessions
 - User-owned Favorites with live price, daily change, and sorting
 - US market dashboard with major indexes and paginated Top 50 US-listed daily movers
+- Sector performance ranking with paginated sector constituent tables
+- Stock detail pages with market statistics, charts, Favorites, and alert creation
 
 ## Example rule
 
@@ -138,9 +140,11 @@ The frontend deliberately separates its three workflows:
 
 | Page | Purpose |
 | --- | --- |
-| Dashboard | Explore major US indexes and the daily Top 10 gainers and losers. Click any row to update the chart and use its star to save the stock. |
+| Dashboard | Explore major US indexes, sector performance, and paginated Top 50 gainers and losers. Open any stock for details or use its star to save it. |
 | My Favorites | Search tickers with autocomplete, manage the signed-in user's private list, sort by daily performance, and inspect a selected chart. |
 | Rule Studio | Compile natural language into validated Rule DSL, run historical replay, activate monitoring, and review alerts. |
+| Sector Detail | Review active US-listed stocks in a selected sector, ranked by daily percentage change with 10-row pagination. |
+| Stock Detail | Inspect a stock's daily statistics, market cap, 52-week range, adaptive chart, Favorite state, and alert shortcut. |
 
 A typical demo flow is:
 
@@ -251,6 +255,7 @@ when the provider does not return enough warmup history.
 ```text
 GET    /market/overview
 GET    /market/quotes?symbols=AAPL,NVDA
+GET    /market/sectors/technology/stocks?page=1&page_size=10
 GET    /favorites
 POST   /favorites
 DELETE /favorites/{symbol}
@@ -263,6 +268,19 @@ regular-market price and previous close. Results expose the market state and
 update time and are cached briefly to avoid redundant calls. Gainers and losers
 each return 50 ranked stocks for independent 10-row pagination, while
 `GET /market/overview?refresh=true` bypasses the cache for a manual refresh.
+The sector ranking uses the 11 SPDR sector ETFs as performance proxies; sector
+detail pages use the screener's actual sector classification for stock lists.
+
+### Stock details
+
+```text
+GET /stocks/NVDA/detail
+GET /stocks/NVDA/chart?period=3mo
+```
+
+Stock details include current and previous prices, daily range and volume,
+market capitalization, 52-week range, exchange, sector, and industry. The UI
+links mover and sector rows to `/stocks/{symbol}` and reuses the adaptive chart.
 Favorites are keyed by authenticated user and symbol, so accounts never share
 saved stocks.
 
