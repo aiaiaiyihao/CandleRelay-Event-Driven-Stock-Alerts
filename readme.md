@@ -91,6 +91,13 @@ python -m app.kafka.SignalConsumer
 
 Swagger is available at <http://localhost:8000/docs>.
 
+Import the included demo bars when running the services manually:
+
+```bash
+python scripts/import_market_bars.py examples/nvda_daily.csv \
+  --symbol NVDA --timeframe 1d --source demo
+```
+
 Configuration:
 
 ```text
@@ -133,11 +140,13 @@ PATCH /rules/{rule_id}/status
 
 ```text
 POST /backtests
+POST /backtests/range
 GET  /backtests/{run_id}
 ```
 
-The current backtest endpoint accepts up to 10,000 normalized historical events
-inline. A later worker-backed data-range API can use the same `BacktestEngine`.
+`POST /backtests` accepts normalized events inline. `POST /backtests/range`
+loads previously imported bars using a rule ID and timezone-aware start/end
+timestamps.
 
 ### Alerts
 
@@ -161,8 +170,12 @@ the Kafka `market-events` topic.
 ## Development
 
 ```bash
-pytest -q tests
+pytest -q
 ```
+
+The test suite includes an end-to-end resume demo that compiles the example
+Chinese sentence, stores the rule, imports `examples/nvda_daily.csv`, runs a
+range backtest, and verifies the expected high-volume SMA20 breakdown trigger.
 
 Database changes must be introduced through a new Alembic revision. Application
 startup deliberately does not call SQLAlchemy `drop_all()` or `create_all()`.
