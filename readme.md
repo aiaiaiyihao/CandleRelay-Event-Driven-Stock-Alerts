@@ -1,179 +1,165 @@
-# Market‑Data‑Service
+# SignalForge
 
-A production‑ready micro‑service that pulls real‑time stock prices from **yfinance**, streams raw ticks through **Kafka**, calculates 5‑point moving averages, and serves everything via a **FastAPI** REST API.
+SignalForge is an event-driven stock alerting and strategy backtesting platform.
+Users describe market conditions in natural language, review the compiled and
+validated Rule DSL, and run the same rule against live Kafka events or historical
+market bars.
 
----
+## Core invariant
 
-## Features
+Live evaluation and historical replay share the same components:
 
-| Layer      | Tech                               | Purpose                                                                  |
-| ---------- | ---------------------------------- | ------------------------------------------------------------------------ |
-| Data Fetch | `yfinance`                         | Pull latest price quotes                                                 |
-| Storage    | **PostgreSQL**                     | Persist raw ticks & computed MAs                                         |
-| Cache      | **Redis**                          | 100‑second hot‑cache for `/prices/latest`                                |
-| Stream     | **Kafka + confluent‑kafka‑python** | Publish raw updates (`price‑events`)                                     |
-| Consumer   | Async worker                       | Compute 5‑MA → `symbol_averages`                                         |
-| API        | **FastAPI**                        | `GET /prices/latest`, `POST /prices/poll`, `POST /prices/poll/stop/{id}` |
-| DevOps     | Docker Compose + GitHub Actions    | CI lint/tests, container build                                           |
-
----
-
-## Repo Layout
-
-```
-market-data-service/
-├── app/
-│   ├── api/          # FastAPI routers
-│   ├── core/         # settings, DB, Redis, Kafka cfg
-│   ├── models/       # SQLAlchemy ORM models
-│   ├── services/     # polling, provider, consumer logic
-│   └── schemas/      # Pydantic request/response models
-├── tests/            # pytest suite (unit + integration)
-├── docker/           # Dockerfile & compose overrides
-├── docs/             # Architecture diagrams
-└── .github/workflows/ci.yml
+```text
+Natural language -> validated Rule DSL
+                              |
+Live Kafka MarketEvent -------+--> IndicatorEngine --> RuleEvaluator --> Alert
+Historical MarketEvent replay +--> IndicatorEngine --> RuleEvaluator --> Backtest
 ```
 
----
+Given the same ordered events and rule version, live and replay evaluation must
+produce identical results. This behavior is covered by automated tests.
 
-## Quick‑start (local)
+## Implemented capabilities
+
+- Versioned, strictly validated Rule DSL
+- AND condition groups and comparison/cross operators
+- Normalized, timezone-aware OHLCV `MarketEvent`
+- Incremental SMA and volume-ratio indicators
+- Explainable condition results with actual left and right values
+- Trigger transition and cooldown behavior
+- Versioned rule persistence and history
+- Historical event replay and persisted backtest summaries
+- Kafka market-event codec and manual-offset consumer
+- Database-backed alert deduplication and cooldown
+- Alert listing, filtering, and acknowledgement
+- Deterministic Chinese and English natural-language compiler
+- Alembic-managed database schema
+
+## Example rule
+
+Input:
+
+```text
+当 NVDA 跌破 SMA20，并且成交量超过过去 20 天平均值的两倍时提醒我。
+```
+
+Compiled DSL:
+
+```json
+{
+  "dsl_version": "1.0",
+  "symbol": "NVDA",
+  "timeframe": "1d",
+  "conditions": {
+    "all": [
+      {
+        "left": {"type": "metric", "metric": "price"},
+        "operator": "crosses_below",
+        "right": {"type": "indicator", "indicator": "sma", "period": 20}
+      },
+      {
+        "left": {"type": "indicator", "indicator": "volume_ratio", "period": 20},
+        "operator": ">",
+        "right": {"type": "value", "value": 2}
+      }
+    ]
+  },
+  "trigger": "on_false_to_true",
+  "cooldown_seconds": 3600
+}
+```
+
+## Local setup
 
 ```bash
-# 1. clone private repo
-$ git clone git@github.com:aiaiaiyihao/market-data-service.git
-$ cd market-data-service
-
-# 2. spin up infra (Postgres, Redis, Kafka, FastAPI)
-$ docker-compose up --build
-
-# 3. hit swagger
-open http://localhost:8000/docs
-```
-
-<details>
-<summary>Ports</summary>
-
-| Service             | Port |
-| ------------------- | ---- |
-| FastAPI             | 8000 |
-| PostgreSQL          | 5432 |
-| Redis               | 6379 |
-| Kafka Broker        | 9092 |
-| Kafka UI (optional) | 8081 |
-
-</details>
-
----
-
-## Manual dev venv
-
-```bash
-python -m venv venv && source venv/bin/activate
+python -m venv marketDataServer
+source marketDataServer/bin/activate
 pip install -r requirements/dev.txt
+docker compose -f docker/docker-compose.yml up -d
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-Environment vars (see `.env.example`):
+Run the live SignalForge Kafka worker separately:
 
+```bash
+python -m app.kafka.SignalConsumer
 ```
+
+Swagger is available at <http://localhost:8000/docs>.
+
+Configuration:
+
+```text
 DATABASE_URL=postgresql://admin:admin@localhost:5432/marketdb
 REDIS_URL=redis://localhost:6379/0
 KAFKA_BOOTSTRAP=localhost:9092
+KAFKA_SIGNAL_GROUP=signalforge-live-rules
 ```
 
----
+## API overview
 
-## 📑 API Reference
+### Compile natural language
 
-### `GET /prices/latest`
+```http
+POST /rules/compile
+Content-Type: application/json
 
-| Query      | Type | Required | Default    |
-| ---------- | ---- | -------- | ---------- |
-| `symbol`   | str  | ✅        | –          |
-| `provider` | str  | ❌        | `yfinance` |
-
-**200**
-
-```json
 {
-  "symbol": "AAPL",
-  "price": 189.31,
-  "timestamp": "2025-06-15T18:22:01Z",
-  "provider": "yfinance"
+  "text": "当 NVDA 跌破 SMA20，并且成交量超过过去 20 天平均值的两倍时提醒我。",
+  "cooldown_seconds": 3600
 }
 ```
 
-### `POST /prices/poll`
+Compilation returns a candidate DSL, an explanation, and ambiguity warnings. It
+does not enable the rule automatically. Submit the reviewed definition to
+`POST /rules`.
 
-```json
-{
-  "symbols": ["AAPL", "MSFT"],
-  "interval": 60,
-  "provider": "yfinance"
-}
+### Rules
+
+```text
+POST  /rules
+GET   /rules
+GET   /rules/{rule_id}
+PUT   /rules/{rule_id}
+GET   /rules/{rule_id}/versions
+PATCH /rules/{rule_id}/status
 ```
 
-**202 Accepted**
+### Backtests
 
-```json
-{
-  "job_id": "poll_abc123",
-  "status": "accepted",
-  "config": {
-    "symbols": ["AAPL", "MSFT"],
-    "interval": 60,
-    "provider": "yfinance"
-  }
-}
+```text
+POST /backtests
+GET  /backtests/{run_id}
 ```
 
-### `POST /prices/poll/stop/{job_id}`
+The current backtest endpoint accepts up to 10,000 normalized historical events
+inline. A later worker-backed data-range API can use the same `BacktestEngine`.
 
-Stops a running poll.
+### Alerts
 
----
+```text
+GET  /alerts
+GET  /alerts?rule_id={rule_id}&acknowledged=false
+POST /alerts/{alert_id}/acknowledge
+```
 
-### ❗ Error Codes
+### Legacy price endpoints
 
-| Code | Reason                               |
-| ---- | ------------------------------------ |
-| 400  | invalid provider / duplicate symbols |
-| 404  | symbol or job not found              |
-| 429  | rate‑limit (future)                  |
-| 500  | unexpected error                     |
+```text
+GET  /prices/latest
+POST /prices/poll
+```
 
----
+These endpoints remain available during the migration from the original market
+data service. New real-time integrations should publish validated OHLCV events to
+the Kafka `market-events` topic.
 
-## 🏗️ Architecture Decisions
-
-* **Single‑table raw ticks** → simplifies Kafka producer and MA consumer.
-* **JSON column for `symbols`** in `poll_jobs` → easy to extend to arbitrary symbol sets.
-* **Composite indexes** on `(symbol, timestamp)` for fast look‑ups and MAs.
-* **Idempotent Kafka producer** → safe retries.
-* **Graceful shutdown** via FastAPI `lifespan` → flush Kafka, close Redis.
-
-See full diagrams in [`docs/`](docs).
-
----
-
-## Docker
+## Development
 
 ```bash
-# Build only API container
-$ docker build -t market-api -f docker/Dockerfile .
-
-# Full stack
-$ docker-compose up -d --build
+pytest -q tests
 ```
 
----
-
-## Troubleshooting
-
-| Symptom                                         | Fix                                                                   |
-| ----------------------------------------------- | --------------------------------------------------------------------- |
-| `Symbol already polling`                        | Stop existing job: `POST /prices/poll/stop/{id}`                      |
-| Kafka `Broker not available`                    | Ensure Kafka & ZooKeeper containers healthy; restart `docker-compose` |
-| `psycopg2.errors.DuplicateTable` on dev restart | Delete old index or remove `Base.metadata.drop_all()` in `main.py`    |
-| Infinite retries in CI                          | Update `.github/workflows/ci.yml` Postgres health‑check timeout       |
-
+Database changes must be introduced through a new Alembic revision. Application
+startup deliberately does not call SQLAlchemy `drop_all()` or `create_all()`.
