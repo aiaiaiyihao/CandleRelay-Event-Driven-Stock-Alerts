@@ -14,6 +14,13 @@ producer_config = {
     "enable.idempotence": True       # avoid duplicates (safe retries)
 }
 
+consumer_config = {
+    "bootstrap.servers": os.getenv("KAFKA_BOOTSTRAP", "localhost:9092"),
+    "group.id": os.getenv("KAFKA_SIGNAL_GROUP", "signalforge-live-rules"),
+    "auto.offset.reset": "earliest",
+    "enable.auto.commit": False,
+}
+
 #Redis
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 redis = Redis.from_url(REDIS_URL, decode_responses=True)
