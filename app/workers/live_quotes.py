@@ -113,10 +113,10 @@ class LiveQuoteWorker:
             return
         timestamp = stream_timestamp(message.get("time"))
         volume = int(message.get("day_volume") or message.get("dayVolume") or 0)
-        await redis.setex(
+        await redis.set(
             f"candlerelay:live-price:{symbol}",
-            CURRENT_PRICE_TTL_SECONDS,
             json.dumps({"symbol": symbol, "price": float(price), "timestamp": timestamp.isoformat()}),
+            ex=CURRENT_PRICE_TTL_SECONDS,
         )
         for target_symbol, timeframe in self.targets:
             if target_symbol != symbol:
