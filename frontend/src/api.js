@@ -35,4 +35,5 @@ export const api = {
     body: JSON.stringify({ symbol }),
   }),
   untrack: (symbol) => request(`/watchlist/${encodeURIComponent(symbol)}`, { method: 'DELETE' }),
+  chart: (symbol, range) => request(`/stocks/${encodeURIComponent(symbol)}/chart?range=${encodeURIComponent(range)}`),
 }

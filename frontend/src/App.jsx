@@ -1,4 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
+import {
+  Area,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import { api } from './api'
 
 const SAMPLE_TEXT = 'Alert me when NVDA crosses below SMA20 and volume is more than 2 times the average of the past 20 trading days.'
@@ -70,6 +80,11 @@ function App() {
   const [search, setSearch] = useState('NVDA')
   const [quote, setQuote] = useState(null)
   const [searchMessage, setSearchMessage] = useState('Enter an exact ticker symbol')
+  const [selectedSymbol, setSelectedSymbol] = useState('NVDA')
+  const [chartRange, setChartRange] = useState('3mo')
+  const [chartData, setChartData] = useState([])
+  const [chartMessage, setChartMessage] = useState('Loading market history…')
+  const [visibleAverages, setVisibleAverages] = useState({ sma_20: true, sma_50: true, sma_200: false })
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('Ready to compile')
 
@@ -77,6 +92,26 @@ function App() {
     api.alerts().then(setAlerts).catch(() => {})
     api.watchlist().then(setTracked).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    let active = true
+    setChartMessage(`Loading ${selectedSymbol} history…`)
+    api.chart(selectedSymbol, chartRange)
+      .then((result) => {
+        if (!active) return
+        setChartData(result.points.map((point) => ({
+          ...point,
+          date: new Date(point.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        })))
+        setChartMessage(`${result.points.length} daily bars`)
+      })
+      .catch((error) => {
+        if (!active) return
+        setChartData([])
+        setChartMessage(error.message)
+      })
+    return () => { active = false }
+  }, [selectedSymbol, chartRange])
 
   const returns = useMemo(() => backtest?.result_summary?.average_forward_returns || {}, [backtest])
 
@@ -149,12 +184,19 @@ function App() {
     try {
       const item = await api.track(symbol)
       setTracked((items) => items.some((entry) => entry.symbol === item.symbol) ? items : [...items, item])
+      setSelectedSymbol(item.symbol)
       setSearchMessage(`${item.symbol} added to tracked symbols`)
     } catch (error) {
       setSearchMessage(error.message)
     } finally {
       setBusy('')
     }
+  }
+
+  function selectTrackedSymbol(symbol) {
+    setSelectedSymbol(symbol)
+    setSearch(symbol)
+    document.getElementById('stock-chart')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   async function untrackSymbol(symbol) {
@@ -228,7 +270,7 @@ function App() {
             ) : (
               <div className="tracked-list">
                 {tracked.map((item) => (
-                  <div className="tracked-row" key={item.symbol}>
+                  <div className={`tracked-row ${selectedSymbol === item.symbol ? 'selected' : ''}`} key={item.symbol} onClick={() => selectTrackedSymbol(item.symbol)} role="button" tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && selectTrackedSymbol(item.symbol)}>
                     <span className="tracking-dot" />
                     <strong>{item.symbol}</strong>
                     <span>Rules ready</span>
@@ -239,6 +281,50 @@ function App() {
               </div>
             )}
           </div>
+        </div>
+      </section>
+
+      <section className="stock-chart-panel panel" id="stock-chart">
+        <div className="chart-header">
+          <div className="chart-symbol">
+            <span>SELECTED MARKET</span>
+            <h2>{selectedSymbol}</h2>
+            <p>{chartMessage}</p>
+          </div>
+          <div className="chart-controls">
+            <div className="range-switcher" aria-label="Chart range">
+              {[['1mo', '1M'], ['3mo', '3M'], ['6mo', '6M'], ['1y', '1Y']].map(([value, label]) => (
+                <button className={chartRange === value ? 'active' : ''} key={value} onClick={() => setChartRange(value)}>{label}</button>
+              ))}
+            </div>
+            <div className="average-switcher" aria-label="Moving averages">
+              {[['sma_20', 'SMA 20'], ['sma_50', 'SMA 50'], ['sma_200', 'SMA 200']].map(([key, label]) => (
+                <button className={visibleAverages[key] ? `active ${key}` : ''} key={key} onClick={() => setVisibleAverages((values) => ({ ...values, [key]: !values[key] }))}><i />{label}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="interactive-chart">
+          {chartData.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={chartData} margin={{ top: 16, right: 14, bottom: 4, left: 0 }}>
+                <defs>
+                  <linearGradient id="priceFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#e76d2d" stopOpacity={0.28} />
+                    <stop offset="100%" stopColor="#e76d2d" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="#252728" vertical={false} />
+                <XAxis dataKey="date" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} minTickGap={34} />
+                <YAxis domain={['auto', 'auto']} orientation="right" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} width={52} tickFormatter={(value) => `$${Number(value).toFixed(0)}`} />
+                <Tooltip content={({ active, payload, label }) => active && payload?.length ? <div className="chart-tooltip"><span>{label}</span>{payload.map((item) => <div key={item.dataKey}><i style={{ background: item.color }} />{item.name}<strong>${Number(item.value).toFixed(2)}</strong></div>)}</div> : null} />
+                <Area type="monotone" dataKey="close" name="Price" stroke="#e9e7e1" strokeWidth={2} fill="url(#priceFill)" dot={false} activeDot={{ r: 4, fill: '#e76d2d', stroke: '#0d0f10', strokeWidth: 2 }} />
+                {visibleAverages.sma_20 && <Line type="monotone" dataKey="sma_20" name="SMA 20" stroke="#e76d2d" strokeWidth={1.5} dot={false} connectNulls={false} />}
+                {visibleAverages.sma_50 && <Line type="monotone" dataKey="sma_50" name="SMA 50" stroke="#5fd398" strokeWidth={1.4} dot={false} connectNulls={false} />}
+                {visibleAverages.sma_200 && <Line type="monotone" dataKey="sma_200" name="SMA 200" stroke="#8887d8" strokeWidth={1.4} dot={false} connectNulls={false} />}
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : <div className="chart-empty">{chartMessage}</div>}
         </div>
       </section>
 
