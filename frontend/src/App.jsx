@@ -677,7 +677,7 @@ function App() {
         <div className="favorites-search stock-search">
           <p className="section-label">FIND A STOCK</p>
           <form onSubmit={searchStock}><span className="search-icon">⌕</span><input value={search} onChange={(event) => setSearch(event.target.value.toUpperCase())} placeholder="AAPL, NVDA, MSFT…" aria-label="Search stock ticker" /><button disabled={busy === 'search'}>{busy === 'search' ? 'Searching…' : 'Search'}</button></form>
-          {suggestions.length > 0 && <div className="stock-suggestions" role="listbox" aria-label="Stock suggestions">{suggestions.map((item) => <button type="button" key={`${item.symbol}-${item.exchange}`} onClick={() => chooseSuggestion(item)} role="option"><strong>{item.symbol}</strong><span>{item.name}</span><em>{item.exchange}</em></button>)}</div>}
+          {suggestions.length > 0 && <div className="stock-suggestions" role="listbox" aria-label="Stock suggestions" onMouseLeave={() => setSuggestions([])}>{suggestions.map((item) => <button type="button" key={`${item.symbol}-${item.exchange}`} onClick={() => chooseSuggestion(item)} role="option"><strong>{item.symbol}</strong><span>{item.name}</span><em>{item.exchange}</em></button>)}</div>}
           <div className="favorites-search-status"><span>{searchMessage}</span>{quote && (tracked.some((item) => item.symbol === quote.symbol) ? <button className="tracked-button" onClick={() => untrackSymbol(quote.symbol)}>★ FAVORITE</button> : <button className="track-button" onClick={() => trackSymbol(quote.symbol)}>☆ ADD FAVORITE</button>)}</div>
         </div>
       </section>
