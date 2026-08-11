@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas.market import MarketOverview, SectorStocksResponse
@@ -20,9 +22,10 @@ async def sector_stocks(
     sector_slug: str,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=50),
+    sort_order: Literal["desc", "asc"] = Query(default="desc"),
 ):
     try:
-        return await fetch_sector_stocks(sector_slug, page, page_size)
+        return await fetch_sector_stocks(sector_slug, page, page_size, sort_order)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Unknown sector: {sector_slug}")
     except ValueError as exc:

@@ -89,7 +89,21 @@ def test_sector_stocks_are_paginated_by_the_api():
 
     assert response.status_code == 200
     assert response.json()["total"] == 42
-    fetch.assert_awaited_once_with("technology", 2, 10)
+    fetch.assert_awaited_once_with("technology", 2, 10, "desc")
+
+
+def test_sector_stocks_support_ascending_daily_change():
+    result = {
+        "sector": "Technology", "slug": "technology", "page": 1, "page_size": 10,
+        "total": 0, "stocks": [], "updated_at": None,
+    }
+    app = FastAPI()
+    app.include_router(router)
+    with patch("app.api.market_router.fetch_sector_stocks", new=AsyncMock(return_value=result)) as fetch:
+        response = TestClient(app).get("/market/sectors/technology/stocks?sort_order=asc")
+
+    assert response.status_code == 200
+    fetch.assert_awaited_once_with("technology", 1, 10, "asc")
 
 
 def test_unknown_sector_returns_not_found():

@@ -397,8 +397,9 @@ async def fetch_sector_performance() -> list[dict]:
     return sorted(sectors, key=lambda item: item["change_percent"], reverse=True)
 
 
-async def fetch_sector_stocks(sector_slug: str, page: int, page_size: int) -> dict:
+async def fetch_sector_stocks(sector_slug: str, page: int, page_size: int, sort_order: str = "desc") -> dict:
     sector_name, _ = SECTOR_ETFS[sector_slug]
+    descending = sort_order == "desc"
     query = active_us_equity_query(yf.EquityQuery("eq", ["sector", sector_name]))
 
     def load_screen():
@@ -407,7 +408,7 @@ async def fetch_sector_stocks(sector_slug: str, page: int, page_size: int) -> di
             offset=(page - 1) * page_size,
             size=page_size,
             sortField="percentchange",
-            sortAsc=False,
+            sortAsc=not descending,
         )
 
     try:
@@ -422,7 +423,7 @@ async def fetch_sector_stocks(sector_slug: str, page: int, page_size: int) -> di
         "page": page,
         "page_size": page_size,
         "total": screen.get("total", 0),
-        "stocks": build_screener_snapshots(quotes, descending=True),
+        "stocks": build_screener_snapshots(quotes, descending=descending),
         "updated_at": datetime.fromtimestamp(max(timestamps), tz=timezone.utc) if timestamps else None,
     }
 

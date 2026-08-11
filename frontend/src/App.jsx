@@ -182,6 +182,7 @@ function App() {
   const [moverPages, setMoverPages] = useState({ gainers: 0, losers: 0 })
   const [sectorStocks, setSectorStocks] = useState({ sector: '', page: 1, page_size: 10, total: 0, stocks: [], updated_at: null })
   const [sectorPage, setSectorPage] = useState(1)
+  const [sectorSortOrder, setSectorSortOrder] = useState('desc')
   const [stockDetail, setStockDetail] = useState(null)
   const [favoriteQuotes, setFavoriteQuotes] = useState([])
   const [favoriteSort, setFavoriteSort] = useState('change_desc')
@@ -228,11 +229,11 @@ function App() {
   useEffect(() => {
     if (page !== 'sector' || !sectorSlug) return
     setBusy('sector')
-    api.sectorStocks(sectorSlug, sectorPage)
+    api.sectorStocks(sectorSlug, sectorPage, sectorSortOrder)
       .then(setSectorStocks)
       .catch(() => setSectorStocks({ sector: sectorSlug, page: sectorPage, page_size: 10, total: 0, stocks: [], updated_at: null }))
       .finally(() => setBusy(''))
-  }, [page, sectorSlug, sectorPage])
+  }, [page, sectorSlug, sectorPage, sectorSortOrder])
 
   useEffect(() => {
     if (page !== 'stock' || !selectedSymbol) return
@@ -559,7 +560,7 @@ function App() {
 
       {page === 'sector' && <section className="sector-page page-surface">
         <button className="back-link" onClick={() => navigate('dashboard')}>← BACK TO DASHBOARD</button>
-        <div className="section-intro"><div><p className="eyebrow">SECTOR CONSTITUENTS</p><h2>{sectorStocks.sector || sectorSlug.replaceAll('-', ' ')}</h2></div><div className="market-status"><p>Active US-listed stocks in this sector, ranked by daily percentage change.</p>{sectorStocks.updated_at && <span>UPDATED {new Date(sectorStocks.updated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>}</div></div>
+        <div className="section-intro"><div><p className="eyebrow">SECTOR CONSTITUENTS</p><h2>{sectorStocks.sector || sectorSlug.replaceAll('-', ' ')}</h2></div><div className="market-status"><p>Active US-listed stocks in this sector, ranked by daily percentage change.</p>{sectorStocks.updated_at && <span>UPDATED {new Date(sectorStocks.updated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>}<div className="sector-sort"><span>SORT</span><button onClick={() => { setSectorSortOrder((order) => order === 'desc' ? 'asc' : 'desc'); setSectorPage(1) }}>{sectorSortOrder === 'desc' ? 'HIGH TO LOW ↓' : 'LOW TO HIGH ↑'}</button></div></div></div>
         <div className="sector-stock-table panel">
           <div className="sector-stock-head"><span>RANK</span><span>SYMBOL</span><span>COMPANY</span><span>PRICE</span><span>DAILY CHANGE</span></div>
           {busy === 'sector' ? <div className="sector-empty">LOADING SECTOR STOCKS…</div> : sectorStocks.stocks.map((stock, index) => <button key={stock.symbol} onClick={() => navigateStock(stock.symbol)}><span>{String(((sectorPage - 1) * 10) + index + 1).padStart(2, '0')}</span><strong>{stock.symbol}</strong><em>{stock.name}</em><span>${stock.price.toFixed(2)}</span><b className={stock.change_percent >= 0 ? 'up' : 'down'}>{stock.change_percent >= 0 ? '+' : ''}{stock.change_percent.toFixed(2)}%</b></button>)}
