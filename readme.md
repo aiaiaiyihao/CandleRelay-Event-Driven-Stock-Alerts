@@ -76,13 +76,16 @@ python -m venv marketDataServer
 source marketDataServer/bin/activate
 pip install -r requirements/dev.txt
 docker compose -f docker/docker-compose.yml up -d
-alembic upgrade head
-uvicorn app.main:app --reload
 ```
 
-Run the live SignalForge Kafka worker separately:
+This starts PostgreSQL, Redis, Kafka, the API, and the live rule worker. The API
+container applies Alembic migrations before serving traffic.
+
+For manual development without the API and worker containers:
 
 ```bash
+alembic upgrade head
+uvicorn app.main:app --reload
 python -m app.kafka.SignalConsumer
 ```
 
