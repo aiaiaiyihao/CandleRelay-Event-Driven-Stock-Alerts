@@ -9,6 +9,7 @@ async function request(path, options = {}) {
     const error = await response.json().catch(() => ({}))
     throw new Error(error.detail || `Request failed (${response.status})`)
   }
+  if (response.status === 204) return null
   return response.json()
 }
 
@@ -27,4 +28,11 @@ export const api = {
   }),
   alerts: () => request('/alerts?acknowledged=false'),
   acknowledge: (id) => request(`/alerts/${id}/acknowledge`, { method: 'POST' }),
+  quote: (symbol) => request(`/prices/latest?symbol=${encodeURIComponent(symbol)}`),
+  watchlist: () => request('/watchlist'),
+  track: (symbol) => request('/watchlist', {
+    method: 'POST',
+    body: JSON.stringify({ symbol }),
+  }),
+  untrack: (symbol) => request(`/watchlist/${encodeURIComponent(symbol)}`, { method: 'DELETE' }),
 }
