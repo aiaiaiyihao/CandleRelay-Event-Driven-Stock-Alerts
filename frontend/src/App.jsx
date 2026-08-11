@@ -185,6 +185,7 @@ function App() {
   const [stockDetail, setStockDetail] = useState(null)
   const [favoriteQuotes, setFavoriteQuotes] = useState([])
   const [favoriteSort, setFavoriteSort] = useState('change_desc')
+  const [favoritePage, setFavoritePage] = useState(0)
   const [search, setSearch] = useState('NVDA')
   const [quote, setQuote] = useState(null)
   const [searchMessage, setSearchMessage] = useState('Enter an exact ticker symbol')
@@ -303,6 +304,12 @@ function App() {
     if (favoriteSort === 'price_desc') return (rightMarket?.price || 0) - (leftMarket?.price || 0)
     return (rightMarket?.change_percent ?? -Infinity) - (leftMarket?.change_percent ?? -Infinity)
   }), [tracked, marketBySymbol, favoriteSort])
+  const favoritePageCount = Math.max(1, Math.ceil(sortedFavorites.length / 10))
+  const visibleFavorites = sortedFavorites.slice(favoritePage * 10, (favoritePage + 1) * 10)
+
+  useEffect(() => {
+    setFavoritePage((current) => Math.min(current, favoritePageCount - 1))
+  }, [favoritePageCount])
 
   async function refreshMarket() {
     setBusy('market-refresh')
@@ -622,21 +629,21 @@ function App() {
               <div><p className="section-label">MY FAVORITES</p><h3>{user ? 'Your private watchlist' : 'Sign in to save stocks'}</h3></div>
               <span>{tracked.length}</span>
             </div>
-            <div className="favorite-sort"><span>SORT BY</span><select value={favoriteSort} onChange={(event) => setFavoriteSort(event.target.value)}><option value="change_desc">Daily change</option><option value="price_desc">Price</option><option value="symbol">Symbol</option></select></div>
+            <div className="favorite-sort"><span>SORT BY</span><select value={favoriteSort} onChange={(event) => { setFavoriteSort(event.target.value); setFavoritePage(0) }}><option value="change_desc">Daily change</option><option value="price_desc">Price</option><option value="symbol">Symbol</option></select></div>
             {tracked.length === 0 ? (
               <div className="watchlist-empty"><b>NO FAVORITES YET</b><p>{user ? 'Search for a ticker or use a star on the dashboard.' : 'Sign in to create your personal favorites list.'}</p></div>
             ) : (
-              <div className="tracked-list">
-                {sortedFavorites.map((item) => (
+              <><div className="tracked-list">
+                {visibleFavorites.map((item) => (
                   <div className={`tracked-row ${selectedSymbol === item.symbol ? 'selected' : ''}`} key={item.symbol} onClick={() => selectTrackedSymbol(item.symbol)} role="button" tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && selectTrackedSymbol(item.symbol)}>
                     <span className="favorite-star">★</span>
                     <strong>{item.symbol}</strong>
                     <span>{marketBySymbol[item.symbol] ? `$${marketBySymbol[item.symbol].price.toFixed(2)}` : 'Quote on select'}</span>
                     <time className={(marketBySymbol[item.symbol]?.change_percent || 0) >= 0 ? 'up' : 'down'}>{marketBySymbol[item.symbol] ? `${marketBySymbol[item.symbol].change_percent >= 0 ? '+' : ''}${marketBySymbol[item.symbol].change_percent.toFixed(2)}%` : '—'}</time>
-                    <button aria-label={`Remove ${item.symbol}`} onClick={() => untrackSymbol(item.symbol)} disabled={busy === `track-${item.symbol}`}>×</button>
+                    <button aria-label={`Remove ${item.symbol}`} onClick={(event) => { event.stopPropagation(); untrackSymbol(item.symbol) }} disabled={busy === `track-${item.symbol}`}>×</button>
                   </div>
                 ))}
-              </div>
+              </div><div className="favorite-pagination"><button disabled={favoritePage === 0} onClick={() => setFavoritePage((value) => value - 1)}>←</button><span>{favoritePage + 1} / {favoritePageCount}</span><button disabled={favoritePage >= favoritePageCount - 1} onClick={() => setFavoritePage((value) => value + 1)}>→</button></div></>
             )}
           </div>
         </div>

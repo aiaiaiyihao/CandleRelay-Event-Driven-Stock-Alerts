@@ -39,7 +39,7 @@ produce identical results. This behavior is covered by automated tests.
 - Ticker autocomplete, live quote lookup, and persistent tracked symbols
 - Adaptive 30-minute through maximum-history charts with SMA20, SMA50, and SMA200 overlays
 - Email or phone registration with password hashing and server-side sessions
-- User-owned Favorites with live price, daily change, and sorting
+- User-owned Favorites with live price, daily change, sorting, and 10-row pagination
 - US market dashboard with major indexes and paginated Top 50 US-listed daily movers
 - Sector performance ranking with paginated sector constituent tables
 - Stock detail pages with market statistics, charts, Favorites, and alert creation
