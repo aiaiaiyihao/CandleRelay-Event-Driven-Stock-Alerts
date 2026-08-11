@@ -80,6 +80,7 @@ function App() {
   const [search, setSearch] = useState('NVDA')
   const [quote, setQuote] = useState(null)
   const [searchMessage, setSearchMessage] = useState('Enter an exact ticker symbol')
+  const [suggestions, setSuggestions] = useState([])
   const [selectedSymbol, setSelectedSymbol] = useState('NVDA')
   const [chartRange, setChartRange] = useState('3mo')
   const [chartData, setChartData] = useState([])
@@ -112,6 +113,24 @@ function App() {
       })
     return () => { active = false }
   }, [selectedSymbol, chartRange])
+
+  useEffect(() => {
+    const query = search.trim()
+    if (!query) {
+      setSuggestions([])
+      return undefined
+    }
+    let active = true
+    const timer = window.setTimeout(() => {
+      api.searchStocks(query)
+        .then((results) => active && setSuggestions(results))
+        .catch(() => active && setSuggestions([]))
+    }, 250)
+    return () => {
+      active = false
+      window.clearTimeout(timer)
+    }
+  }, [search])
 
   const returns = useMemo(() => backtest?.result_summary?.average_forward_returns || {}, [backtest])
 
@@ -160,10 +179,9 @@ function App() {
     }
   }
 
-  async function searchStock(event) {
-    event.preventDefault()
-    const symbol = search.trim().toUpperCase()
+  async function lookupStock(symbol) {
     if (!symbol) return
+    setSuggestions([])
     setBusy('search')
     setQuote(null)
     setSearchMessage(`Looking up ${symbol}…`)
@@ -177,6 +195,16 @@ function App() {
     } finally {
       setBusy('')
     }
+  }
+
+  async function searchStock(event) {
+    event.preventDefault()
+    await lookupStock(search.trim().toUpperCase())
+  }
+
+  function chooseSuggestion(item) {
+    setSearch(item.symbol)
+    lookupStock(item.symbol)
   }
 
   async function trackSymbol(symbol) {
@@ -244,6 +272,17 @@ function App() {
               <input value={search} onChange={(event) => setSearch(event.target.value.toUpperCase())} placeholder="AAPL, NVDA, MSFT…" aria-label="Search stock ticker" />
               <button disabled={busy === 'search'}>{busy === 'search' ? 'Searching…' : 'Search quote'}</button>
             </form>
+            {suggestions.length > 0 && (
+              <div className="stock-suggestions" role="listbox" aria-label="Stock suggestions">
+                {suggestions.map((item) => (
+                  <button type="button" key={`${item.symbol}-${item.exchange}`} onClick={() => chooseSuggestion(item)} role="option">
+                    <strong>{item.symbol}</strong>
+                    <span>{item.name}</span>
+                    <em>{item.exchange}</em>
+                  </button>
+                ))}
+              </div>
+            )}
             <p className="search-message">{searchMessage}</p>
             <div className="quick-symbols">
               <span>QUICK SEARCH</span>
