@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Area,
+  Bar,
   CartesianGrid,
   ComposedChart,
   Line,
@@ -99,7 +100,7 @@ function formatChartTimestamp(timestamp, interval, full = false) {
 
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
-  return <div className="chart-tooltip"><span>{payload[0].payload.tooltipDate || label}</span>{payload.map((item) => <div key={item.dataKey}><i style={{ background: item.color }} />{item.name}<strong>${Number(item.value).toFixed(2)}</strong></div>)}</div>
+  return <div className="chart-tooltip"><span>{payload[0].payload.tooltipDate || label}</span>{payload.map((item) => <div key={item.dataKey}><i style={{ background: item.color }} />{item.name}<strong>{item.dataKey === 'volume' ? Number(item.value).toLocaleString('en-US') : `$${Number(item.value).toFixed(2)}`}</strong></div>)}</div>
 }
 
 function MoverList({ title, items, tone, page, setPage, selectedSymbol, selectSymbol, previewSymbol, cancelPreview, tracked, trackSymbol, untrackSymbol }) {
@@ -207,8 +208,10 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
           <CartesianGrid stroke="#252728" vertical={false} />
           <XAxis dataKey="date" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} minTickGap={34} />
           <YAxis domain={yDomain} allowDataOverflow={false} orientation="right" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} width={52} tickFormatter={(value) => `$${Number(value).toFixed(0)}`} />
+          <YAxis yAxisId="volume" domain={[0, (maximum) => Math.max(maximum * 4.5, 1)]} hide />
           <Tooltip content={<ChartTooltip />} />
           <Area type="monotone" dataKey="close" name="Price" stroke="#e9e7e1" strokeWidth={2} fill={`url(#${compact ? 'dashboardPriceFill' : 'favoritePriceFill'})`} dot={false} />
+          <Bar yAxisId="volume" dataKey="volume" name="Volume" fill="#5c6260" fillOpacity={0.42} maxBarSize={12} isAnimationActive={false} />
           {averages.sma_20 && <Line type="monotone" dataKey="sma_20" name="SMA 20" stroke="#e76d2d" strokeWidth={1.5} dot={false} />}
           {averages.sma_50 && <Line type="monotone" dataKey="sma_50" name="SMA 50" stroke="#5fd398" strokeWidth={1.4} dot={false} />}
           {averages.sma_200 && <Line type="monotone" dataKey="sma_200" name="SMA 200" stroke="#8887d8" strokeWidth={1.4} dot={false} />}
