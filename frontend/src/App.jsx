@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Area,
   CartesianGrid,
@@ -111,7 +111,7 @@ function ChartTooltip({ active, payload, label }) {
   return <div className="chart-tooltip"><span>{payload[0].payload.tooltipDate || label}</span>{payload.map((item) => <div key={item.dataKey}><i style={{ background: item.color }} />{item.name}<strong>${Number(item.value).toFixed(2)}</strong></div>)}</div>
 }
 
-function MoverList({ title, items, tone, page, setPage, selectedSymbol, selectSymbol, tracked, trackSymbol, untrackSymbol }) {
+function MoverList({ title, items, tone, page, setPage, selectedSymbol, selectSymbol, previewSymbol, cancelPreview, tracked, trackSymbol, untrackSymbol }) {
   const pageSize = 10
   const pageCount = Math.max(1, Math.ceil(items.length / pageSize))
   const safePage = Math.min(page, pageCount - 1)
@@ -119,7 +119,7 @@ function MoverList({ title, items, tone, page, setPage, selectedSymbol, selectSy
   return (
     <div className="mover-list">
       <h3>{title}<span>TOP 50 · 10 / PAGE</span></h3>
-      {visibleItems.map((item, index) => <div className={`mover-row ${selectedSymbol === item.symbol ? 'selected' : ''}`} key={item.symbol} onClick={() => selectSymbol(item.symbol)} role="button" tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && selectSymbol(item.symbol)}><span>{String((safePage * pageSize) + index + 1).padStart(2, '0')}</span><strong>{item.symbol}</strong><em>${item.price.toFixed(2)}</em><b className={tone}>{item.change_percent >= 0 ? '+' : ''}{item.change_percent.toFixed(2)}%</b><button className={tracked.some((favorite) => favorite.symbol === item.symbol) ? 'star active' : 'star'} onClick={(event) => { event.stopPropagation(); tracked.some((favorite) => favorite.symbol === item.symbol) ? untrackSymbol(item.symbol) : trackSymbol(item.symbol) }} aria-label={`Toggle ${item.symbol} favorite`}>★</button></div>)}
+      {visibleItems.map((item, index) => <div className={`mover-row ${selectedSymbol === item.symbol ? 'selected' : ''}`} key={item.symbol} onMouseEnter={() => previewSymbol(item.symbol)} onMouseLeave={cancelPreview} onClick={() => { cancelPreview(); selectSymbol(item.symbol) }} role="button" tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && selectSymbol(item.symbol)}><span>{String((safePage * pageSize) + index + 1).padStart(2, '0')}</span><strong>{item.symbol}</strong><em>${item.price.toFixed(2)}</em><b className={tone}>{item.change_percent >= 0 ? '+' : ''}{item.change_percent.toFixed(2)}%</b><button className={tracked.some((favorite) => favorite.symbol === item.symbol) ? 'star active' : 'star'} onClick={(event) => { event.stopPropagation(); cancelPreview(); tracked.some((favorite) => favorite.symbol === item.symbol) ? untrackSymbol(item.symbol) : trackSymbol(item.symbol) }} aria-label={`Toggle ${item.symbol} favorite`}>★</button></div>)}
       <div className="mover-pagination"><button disabled={safePage === 0} onClick={() => setPage(safePage - 1)} aria-label={`Previous ${title.toLowerCase()} page`}>←</button><span>{safePage + 1} / {pageCount}</span><button disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)} aria-label={`Next ${title.toLowerCase()} page`}>→</button></div>
     </div>
   )
@@ -199,6 +199,7 @@ function App() {
   const [visibleAverages, setVisibleAverages] = useState({ sma_20: true, sma_50: true, sma_200: false })
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('Ready to compile')
+  const previewTimer = useRef(null)
 
   useEffect(() => {
     if (window.location.pathname === '/') {
@@ -209,6 +210,8 @@ function App() {
     api.marketOverview().then(setMarket).catch(() => {})
     api.alerts().then(setAlerts).catch(() => {})
   }, [])
+
+  useEffect(() => () => window.clearTimeout(previewTimer.current), [])
 
   useEffect(() => {
     const handleNavigation = () => {
@@ -362,6 +365,18 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  function previewSymbolLater(symbol) {
+    window.clearTimeout(previewTimer.current)
+    previewTimer.current = window.setTimeout(() => {
+      setSelectedSymbol(symbol.toUpperCase())
+      setSearch(symbol.toUpperCase())
+    }, 400)
+  }
+
+  function cancelSymbolPreview() {
+    window.clearTimeout(previewTimer.current)
+  }
+
   function createAlertForStock(symbol) {
     setText(`Alert me when ${symbol} crosses below SMA20 and volume is more than 2 times the average of the past 20 trading days.`)
     navigate('rule-studio')
@@ -485,9 +500,8 @@ function App() {
   }
 
   function selectTrackedSymbol(symbol) {
-    setSelectedSymbol(symbol)
-    setSearch(symbol)
-    setChartPeriod('1d')
+    cancelSymbolPreview()
+    navigateStock(symbol)
   }
 
   function selectMarketSymbol(symbol) {
@@ -565,8 +579,8 @@ function App() {
         <div className="dashboard-grid">
           <div className="mover-panel panel">
             <div className="mover-columns">
-              <MoverList title="TOP GAINERS" items={market.gainers} tone="up" page={moverPages.gainers} setPage={(nextPage) => setMoverPages((pages) => ({ ...pages, gainers: nextPage }))} selectedSymbol={selectedSymbol} selectSymbol={navigateStock} tracked={tracked} trackSymbol={trackSymbol} untrackSymbol={untrackSymbol} />
-              <MoverList title="TOP LOSERS" items={market.losers} tone="down" page={moverPages.losers} setPage={(nextPage) => setMoverPages((pages) => ({ ...pages, losers: nextPage }))} selectedSymbol={selectedSymbol} selectSymbol={navigateStock} tracked={tracked} trackSymbol={trackSymbol} untrackSymbol={untrackSymbol} />
+              <MoverList title="TOP GAINERS" items={market.gainers} tone="up" page={moverPages.gainers} setPage={(nextPage) => setMoverPages((pages) => ({ ...pages, gainers: nextPage }))} selectedSymbol={selectedSymbol} selectSymbol={navigateStock} previewSymbol={previewSymbolLater} cancelPreview={cancelSymbolPreview} tracked={tracked} trackSymbol={trackSymbol} untrackSymbol={untrackSymbol} />
+              <MoverList title="TOP LOSERS" items={market.losers} tone="down" page={moverPages.losers} setPage={(nextPage) => setMoverPages((pages) => ({ ...pages, losers: nextPage }))} selectedSymbol={selectedSymbol} selectSymbol={navigateStock} previewSymbol={previewSymbolLater} cancelPreview={cancelSymbolPreview} tracked={tracked} trackSymbol={trackSymbol} untrackSymbol={untrackSymbol} />
             </div>
           </div>
           <MarketChart symbol={selectedSymbol} displayName={marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
@@ -632,12 +646,12 @@ function App() {
             ) : (
               <><div className="tracked-list">
                 {visibleFavorites.map((item) => (
-                  <div className={`tracked-row ${selectedSymbol === item.symbol ? 'selected' : ''}`} key={item.symbol} onClick={() => selectTrackedSymbol(item.symbol)} role="button" tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && selectTrackedSymbol(item.symbol)}>
+                  <div className={`tracked-row ${selectedSymbol === item.symbol ? 'selected' : ''}`} key={item.symbol} onMouseEnter={() => previewSymbolLater(item.symbol)} onMouseLeave={cancelSymbolPreview} onClick={() => selectTrackedSymbol(item.symbol)} role="button" tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && selectTrackedSymbol(item.symbol)}>
                     <span className="favorite-star">★</span>
                     <strong>{item.symbol}</strong>
                     <span>{marketBySymbol[item.symbol] ? `$${marketBySymbol[item.symbol].price.toFixed(2)}` : 'Quote on select'}</span>
                     <time className={(marketBySymbol[item.symbol]?.change_percent || 0) >= 0 ? 'up' : 'down'}>{marketBySymbol[item.symbol] ? `${marketBySymbol[item.symbol].change_percent >= 0 ? '+' : ''}${marketBySymbol[item.symbol].change_percent.toFixed(2)}%` : '—'}</time>
-                    <button aria-label={`Remove ${item.symbol}`} onClick={(event) => { event.stopPropagation(); untrackSymbol(item.symbol) }} disabled={busy === `track-${item.symbol}`}>×</button>
+                    <button aria-label={`Remove ${item.symbol}`} onClick={(event) => { event.stopPropagation(); cancelSymbolPreview(); untrackSymbol(item.symbol) }} disabled={busy === `track-${item.symbol}`}>×</button>
                   </div>
                 ))}
               </div><div className="favorite-pagination"><button disabled={favoritePage === 0} onClick={() => setFavoritePage((value) => value - 1)}>←</button><span>{favoritePage + 1} / {favoritePageCount}</span><button disabled={favoritePage >= favoritePageCount - 1} onClick={() => setFavoritePage((value) => value + 1)}>→</button></div></>
