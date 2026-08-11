@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 import asyncio
 import time
 
+from app.services.cache import get_cached_json, set_cached_json
+
 
 CHART_RANGES = {"1mo", "3mo", "6mo", "1y"}
 CHART_INTERVALS = {
@@ -94,7 +96,13 @@ async def search_stocks_yfinance(query: str, limit: int = 6) -> list[dict]:
     ][:limit]
 
 
-async def fetch_stock_detail_yfinance(symbol: str) -> dict:
+async def fetch_stock_detail_yfinance(symbol: str, force_refresh: bool = False) -> dict:
+    cache_key = f"candlerelay:stock-detail:{symbol.upper()}"
+    if not force_refresh:
+        cached = await get_cached_json(cache_key)
+        if cached is not None:
+            return cached
+
     def load_detail():
         return yf.Ticker(symbol).info
 
@@ -108,7 +116,7 @@ async def fetch_stock_detail_yfinance(symbol: str) -> dict:
     previous = info.get("regularMarketPreviousClose") or info.get("previousClose")
     change = float(price) - float(previous) if previous else None
     timestamp = info.get("regularMarketTime")
-    return {
+    detail = {
         "symbol": symbol.upper(),
         "name": info.get("longName") or info.get("shortName") or symbol.upper(),
         "exchange": info.get("fullExchangeName") or info.get("exchange"),
@@ -129,6 +137,8 @@ async def fetch_stock_detail_yfinance(symbol: str) -> dict:
         "market_state": info.get("marketState"),
         "updated_at": datetime.fromtimestamp(timestamp, tz=timezone.utc) if timestamp else datetime.now(timezone.utc),
     }
+    await set_cached_json(cache_key, detail, ttl_seconds=60)
+    return detail
 
 
 async def fetch_chart_yfinance(symbol: str, chart_range: str, chart_interval: str = "1d") -> dict:
@@ -167,6 +177,10 @@ async def fetch_chart_preset_yfinance(symbol: str, period: str) -> dict:
     if period not in CHART_PRESETS:
         raise ValueError(f"Unsupported chart period: {period}")
     config = CHART_PRESETS[period]
+    cache_key = f"candlerelay:stock-chart:{symbol.upper()}:{period}"
+    cached = await get_cached_json(cache_key)
+    if cached is not None:
+        return cached
 
     def load_history():
         return yf.Ticker(symbol).history(
@@ -190,12 +204,15 @@ async def fetch_chart_preset_yfinance(symbol: str, period: str) -> dict:
     points = build_chart_points(history)
     if config["points"] is not None:
         points = points[-config["points"]:]
-    return {
+    chart = {
         "symbol": symbol.upper(),
         "range": period,
         "interval": config["interval"],
         "points": points,
     }
+    ttl_seconds = 60 if period in {"30m", "60m", "1d", "1wk"} else 300
+    await set_cached_json(cache_key, chart, ttl_seconds=ttl_seconds)
+    return chart
 
 
 def aggregate_chart_history(history, frequency: str | None = None, rows: int | None = None):

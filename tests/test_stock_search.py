@@ -47,9 +47,10 @@ def test_stock_detail_returns_market_statistics():
         "change_percent": 2.7,
         "market_cap": 4_000_000_000_000,
     }
-    with patch("app.api.priceRouter.fetch_stock_detail_yfinance", new=AsyncMock(return_value=detail)):
+    with patch("app.api.priceRouter.fetch_stock_detail_yfinance", new=AsyncMock(return_value=detail)) as fetch:
         response = client().get("/stocks/nvda/detail")
 
     assert response.status_code == 200
     assert response.json()["symbol"] == "NVDA"
     assert response.json()["market_cap"] == 4_000_000_000_000
+    fetch.assert_awaited_once_with("NVDA", force_refresh=False)

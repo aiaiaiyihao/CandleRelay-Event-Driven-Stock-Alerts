@@ -30,9 +30,9 @@ async def search_stocks(q: str = Query(..., min_length=1, max_length=80)):
 
 
 @router.get("/stocks/{symbol}/detail", response_model=StockDetailResponse)
-async def get_stock_detail(symbol: str):
+async def get_stock_detail(symbol: str, refresh: bool = Query(default=False)):
     try:
-        return await fetch_stock_detail_yfinance(symbol.upper())
+        return await fetch_stock_detail_yfinance(symbol.upper(), force_refresh=refresh)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
