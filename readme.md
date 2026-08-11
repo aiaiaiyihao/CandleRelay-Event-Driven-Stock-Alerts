@@ -1,6 +1,6 @@
-# SignalForge
+# CrandleRelay
 
-SignalForge is an event-driven stock alerting and strategy backtesting platform.
+CrandleRelay is an event-driven stock alerting and strategy backtesting platform.
 Users describe market conditions in natural language, review the compiled and
 validated Rule DSL, and run the same rule against live Kafka events or historical
 market bars. A React dashboard turns this workflow into a focused, interactive
@@ -85,7 +85,7 @@ docker compose -f docker/docker-compose.yml up -d
 
 This starts PostgreSQL, Redis, Kafka, the API, the live rule worker, and the
 React frontend. The API container applies Alembic migrations before serving
-traffic. SignalForge uses its own `signalforge_pgdata` volume so older local
+traffic. CrandleRelay uses its own `crandleRelay_pgdata` volume so older local
 PostgreSQL projects do not interfere with the demo credentials.
 
 Open:
@@ -128,7 +128,7 @@ Configuration:
 DATABASE_URL=postgresql://admin:admin@localhost:5432/marketdb
 REDIS_URL=redis://localhost:6379/0
 KAFKA_BOOTSTRAP=localhost:9092
-KAFKA_SIGNAL_GROUP=signalforge-live-rules
+KAFKA_SIGNAL_GROUP=crandleRelay-live-rules
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 ```
 
