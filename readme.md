@@ -37,7 +37,7 @@ produce identical results. This behavior is covered by automated tests.
 - Alembic-managed database schema
 - Responsive React rule, backtest, and alert dashboard
 - Persistent tracked-symbol watchlist with live ticker lookup
-- Interactive 30-minute, 60-minute, daily, weekly, and monthly charts with SMA20, SMA50, and SMA200 overlays
+- Adaptive 30-minute through maximum-history charts with SMA20, SMA50, and SMA200 overlays
 - Email or phone registration with password hashing and server-side sessions
 - User-owned Favorites with live price, daily change, and sorting
 - US market dashboard with major indexes and daily Top 10 movers
@@ -202,7 +202,7 @@ PATCH /rules/{rule_id}/status
 
 ```text
 GET    /prices/latest?symbol=NVDA
-GET    /stocks/NVDA/chart?range=3mo&interval=1wk
+GET    /stocks/NVDA/chart?period=5y
 GET    /watchlist
 POST   /watchlist
 DELETE /watchlist/{symbol}
@@ -210,9 +210,10 @@ DELETE /watchlist/{symbol}
 
 The dashboard uses exact ticker lookup for the latest yfinance quote. Tracked
 symbols are stored in PostgreSQL and remain available after a page refresh.
-Selecting a tracked symbol loads OHLCV history for `1mo`, `3mo`, `6mo`, or
-`1y`. The interval can be `30m`, `60m`, `1d`, `1wk`, or `1mo`, with
-server-calculated SMA20, SMA50, and SMA200 series based on the selected bars.
+The chart supports `30m`, `60m`, `1d`, `1wk`, `1mo`, `3mo`, `1y`, `5y`, and
+`max` ranges. Sampling automatically becomes coarser for longer ranges, from
+five-minute intraday points to monthly maximum-history points. SMA20, SMA50,
+and SMA200 are calculated from the underlying sampled series before display.
 
 ### Market dashboard and Favorites
 
