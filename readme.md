@@ -3,7 +3,8 @@
 SignalForge is an event-driven stock alerting and strategy backtesting platform.
 Users describe market conditions in natural language, review the compiled and
 validated Rule DSL, and run the same rule against live Kafka events or historical
-market bars.
+market bars. A React dashboard turns this workflow into a focused, interactive
+demo suitable for portfolio and interview presentations.
 
 ## Core invariant
 
@@ -34,6 +35,7 @@ produce identical results. This behavior is covered by automated tests.
 - Alert listing, filtering, and acknowledgement
 - Deterministic Chinese and English natural-language compiler
 - Alembic-managed database schema
+- Responsive React rule, backtest, and alert dashboard
 
 ## Example rule
 
@@ -78,8 +80,17 @@ pip install -r requirements/dev.txt
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-This starts PostgreSQL, Redis, Kafka, the API, and the live rule worker. The API
-container applies Alembic migrations before serving traffic.
+This starts PostgreSQL, Redis, Kafka, the API, the live rule worker, and the
+React frontend. The API container applies Alembic migrations before serving
+traffic.
+
+Open:
+
+| Surface | URL |
+| --- | --- |
+| SignalForge dashboard | <http://localhost:3000> |
+| FastAPI Swagger | <http://localhost:8000/docs> |
+| API health check | <http://localhost:8000/health> |
 
 For manual development without the API and worker containers:
 
@@ -88,8 +99,6 @@ alembic upgrade head
 uvicorn app.main:app --reload
 python -m app.kafka.SignalConsumer
 ```
-
-Swagger is available at <http://localhost:8000/docs>.
 
 Import the included demo bars when running the services manually:
 
@@ -105,6 +114,35 @@ DATABASE_URL=postgresql://admin:admin@localhost:5432/marketdb
 REDIS_URL=redis://localhost:6379/0
 KAFKA_BOOTSTRAP=localhost:9092
 KAFKA_SIGNAL_GROUP=signalforge-live-rules
+CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+```
+
+## React dashboard
+
+The dashboard is intentionally centered on the project's differentiating flow:
+
+1. Write a market rule in natural language.
+2. Compile it into a validated and explainable Rule DSL.
+3. Review and activate the versioned rule.
+4. Replay stored market bars and inspect forward returns.
+5. View and acknowledge alerts produced by the live Kafka worker.
+
+The UI uses realistic sample content on first render so the project remains
+presentable before the local services are started. Actions use the real FastAPI
+endpoints whenever the backend is available.
+
+Run the frontend separately during development:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Set a different API origin in `frontend/.env` when needed:
+
+```text
+VITE_API_URL=http://localhost:8000
 ```
 
 ## API overview
@@ -170,7 +208,14 @@ the Kafka `market-events` topic.
 ## Development
 
 ```bash
+# Backend tests
 pytest -q
+
+# Frontend production build
+npm --prefix frontend run build
+
+# Validate the complete container stack
+docker compose -f docker/docker-compose.yml config
 ```
 
 The test suite includes an end-to-end resume demo that compiles the example
@@ -179,3 +224,35 @@ range backtest, and verifies the expected high-volume SMA20 breakdown trigger.
 
 Database changes must be introduced through a new Alembic revision. Application
 startup deliberately does not call SQLAlchemy `drop_all()` or `create_all()`.
+
+## Project structure
+
+```text
+app/
+├── api/             FastAPI rule, backtest, alert, and price routes
+├── backtesting/     Historical event replay and forward-return metrics
+├── compilers/       Natural-language compiler boundary and local compiler
+├── domain/          Rule DSL and normalized MarketEvent
+├── indicators/      Incremental SMA, EMA, RSI, and volume ratio
+├── kafka/           Market-event codec, producer, and live worker
+├── models/          SQLAlchemy persistence models
+└── services/        Rule, alert, market data, and backtest workflows
+
+frontend/            React + Vite dashboard
+migrations/          Alembic schema history
+examples/            Importable NVDA demonstration data
+docker/              API image and complete Compose stack
+tests/               Unit, API, replay-parity, and end-to-end demo tests
+```
+
+## Resume talking points
+
+- Designed one deterministic rule engine shared by Kafka live processing and
+  historical replay, preventing semantic drift between alerts and backtests.
+- Compiled natural-language market conditions into a versioned Pydantic DSL
+  with strict validation and explainable per-condition results.
+- Built incremental technical indicators and durable alert deduplication and
+  cooldown handling using PostgreSQL, Redis-ready configuration, and Kafka
+  manual offset commits.
+- Delivered a Dockerized FastAPI and React application with Alembic migrations,
+  reproducible demo data, and comprehensive automated tests.
