@@ -255,6 +255,7 @@ function App() {
   const [sectorSortOrder, setSectorSortOrder] = useState('desc')
   const [stockDetail, setStockDetail] = useState(null)
   const [favoriteQuotes, setFavoriteQuotes] = useState([])
+  const [favoriteCompanyNames, setFavoriteCompanyNames] = useState({})
   const [favoriteNews, setFavoriteNews] = useState([])
   const [favoriteNewsPage, setFavoriteNewsPage] = useState(0)
   const [favoriteSort, setFavoriteSort] = useState('change_desc')
@@ -329,6 +330,21 @@ function App() {
     if (tracked.length) api.marketQuotes(tracked.map((item) => item.symbol)).then(setFavoriteQuotes).catch(() => setFavoriteQuotes([]))
     else setFavoriteQuotes([])
   }, [tracked])
+
+  useEffect(() => {
+    if (page !== 'favorites' || !selectedSymbol || favoriteCompanyNames[selectedSymbol]) return undefined
+    let active = true
+    api.searchStocks(selectedSymbol)
+      .then((results) => {
+        if (!active) return
+        const exactMatch = results.find((item) => item.symbol === selectedSymbol)
+        if (exactMatch?.name && exactMatch.name !== selectedSymbol) {
+          setFavoriteCompanyNames((current) => ({ ...current, [selectedSymbol]: exactMatch.name }))
+        }
+      })
+      .catch(() => {})
+    return () => { active = false }
+  }, [page, selectedSymbol, favoriteCompanyNames])
 
   useEffect(() => {
     setFavoriteNewsPage(0)
@@ -664,7 +680,7 @@ function App() {
               <MoverList title="TOP LOSERS" items={market.losers} tone="down" page={moverPages.losers} setPage={(nextPage) => setMoverPages((pages) => ({ ...pages, losers: nextPage }))} selectedSymbol={selectedSymbol} selectSymbol={navigateStock} previewSymbol={previewSymbolLater} cancelPreview={cancelSymbolPreview} tracked={tracked} trackSymbol={trackSymbol} untrackSymbol={untrackSymbol} />
             </div>
           </div>
-          <MarketChart symbol={selectedSymbol} displayName={marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
+          <MarketChart symbol={selectedSymbol} displayName={favoriteCompanyNames[selectedSymbol] || marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
         </div>
         <section className="sector-panel panel">
           <div className="sector-heading"><div><p className="eyebrow">SECTOR ETF PROXY</p><h3>Sector performance</h3></div><span>RANKED HIGH TO LOW · CLICK TO EXPLORE</span></div>
