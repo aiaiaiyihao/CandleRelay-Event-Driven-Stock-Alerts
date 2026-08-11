@@ -92,6 +92,16 @@ services:
       api:
         condition: service_healthy
 
+  closing-snapshot-worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: python -m app.workers.closing_snapshot
+    environment: *signalforge-environment
+    depends_on:
+      api:
+        condition: service_healthy
+
   frontend:
     build:
       context: ../frontend
