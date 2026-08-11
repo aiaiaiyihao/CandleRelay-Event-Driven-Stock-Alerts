@@ -211,7 +211,7 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
           <button disabled={yStretch === yPaddingRatios.length - 1} onClick={() => setYStretch((value) => Math.min(yPaddingRatios.length - 1, value + 1))} aria-label="Stretch price axis">+</button>
           <button className="chart-reset" onClick={resetChartView}>RESET</button>
         </div>
-        {visibleData.length ? <ResponsiveContainer width="100%" height="100%"><ComposedChart data={visibleData} margin={{ top: 16, right: 14, bottom: 4, left: 0 }}>
+        {visibleData.length ? <ResponsiveContainer width="100%" height="100%"><ComposedChart data={visibleData} margin={{ top: 62, right: 14, bottom: 4, left: 0 }}>
           <defs><linearGradient id={compact ? 'dashboardPriceFill' : 'favoritePriceFill'} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e76d2d" stopOpacity={0.28} /><stop offset="100%" stopColor="#e76d2d" stopOpacity={0} /></linearGradient></defs>
           <CartesianGrid stroke="#252728" vertical={false} />
           <XAxis dataKey="date" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} minTickGap={34} />
