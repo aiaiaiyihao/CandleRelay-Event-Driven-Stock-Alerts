@@ -7,3 +7,4 @@ confluent-kafka
 python-dotenv
 pytest
 httpx
+alembic

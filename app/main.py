@@ -1,18 +1,10 @@
 from fastapi import FastAPI
-from app.models.MovingAverage import MovingAverage
-from app.models.RawPrice import RawPrice
-from app.models.PollTask import PollTask
-from app.models.Rule import Rule, RuleVersion
 from app.api.priceRouter import router as prices_router
 from app.api.ruleRouter import router as rules_router
-from app.core.config import Base, engine
 import logging
 from app.core.config import redis
 from app.kafka.Producer import producer
 from contextlib import asynccontextmanager
-
-# create all the tables
-Base.metadata.create_all(bind=engine)
 
 #graceful shutdown
 @asynccontextmanager
