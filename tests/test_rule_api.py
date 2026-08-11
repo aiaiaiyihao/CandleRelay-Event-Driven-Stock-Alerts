@@ -114,3 +114,19 @@ def test_update_returns_404_for_unknown_rule():
     response = client.put("/rules/missing", json=rule_payload())
 
     assert response.status_code == 404
+
+
+def test_disable_rule_without_creating_a_new_version():
+    client = create_client()
+    created = client.post("/rules", json=rule_payload()).json()
+
+    response = client.patch(
+        f"/rules/{created['id']}/status",
+        json={"enabled": False},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["enabled"] is False
+    assert response.json()["version"] == 1
+    versions = client.get(f"/rules/{created['id']}/versions").json()
+    assert len(versions) == 1

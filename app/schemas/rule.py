@@ -17,6 +17,12 @@ class RuleUpdate(BaseModel):
     definition: RuleDefinition
 
 
+class RuleStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+
+
 class RuleResponse(BaseModel):
     id: str
     name: str

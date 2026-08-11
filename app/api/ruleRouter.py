@@ -2,12 +2,19 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.config import get_db
-from app.schemas.rule import RuleCreate, RuleResponse, RuleUpdate, RuleVersionResponse
+from app.schemas.rule import (
+    RuleCreate,
+    RuleResponse,
+    RuleStatusUpdate,
+    RuleUpdate,
+    RuleVersionResponse,
+)
 from app.services.ruleService import (
     create_rule,
     get_rule,
     list_rule_versions,
     list_rules,
+    set_rule_enabled,
     update_rule,
 )
 
@@ -47,3 +54,15 @@ def get_rule_versions(rule_id: str, db: Session = Depends(get_db)):
     if versions is None:
         raise HTTPException(status_code=404, detail="Rule not found")
     return versions
+
+
+@router.patch("/{rule_id}/status", response_model=RuleResponse)
+def patch_rule_status(
+    rule_id: str,
+    request: RuleStatusUpdate,
+    db: Session = Depends(get_db),
+):
+    rule = set_rule_enabled(rule_id, request.enabled, db)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    return rule

@@ -86,6 +86,24 @@ def list_rule_versions(
     ]
 
 
+def set_rule_enabled(
+    rule_id: str,
+    enabled: bool,
+    session: Session,
+) -> RuleResponse | None:
+    rule = session.execute(
+        select(Rule)
+        .where(Rule.id == rule_id)
+        .options(selectinload(Rule.versions))
+    ).scalar_one_or_none()
+    if rule is None:
+        return None
+    rule.enabled = enabled
+    session.commit()
+    session.refresh(rule)
+    return _to_response(rule, _current_version(rule))
+
+
 def _current_version(rule: Rule) -> RuleVersion:
     return next(
         version for version in rule.versions if version.version == rule.current_version
