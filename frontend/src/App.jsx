@@ -255,7 +255,7 @@ function App() {
   const [sectorSortOrder, setSectorSortOrder] = useState('desc')
   const [stockDetail, setStockDetail] = useState(null)
   const [favoriteQuotes, setFavoriteQuotes] = useState([])
-  const [favoriteCompanyNames, setFavoriteCompanyNames] = useState({})
+  const [favoriteDetail, setFavoriteDetail] = useState(null)
   const [favoriteNews, setFavoriteNews] = useState([])
   const [favoriteNewsPage, setFavoriteNewsPage] = useState(0)
   const [favoriteSort, setFavoriteSort] = useState('change_desc')
@@ -332,19 +332,14 @@ function App() {
   }, [tracked])
 
   useEffect(() => {
-    if (page !== 'favorites' || !selectedSymbol || favoriteCompanyNames[selectedSymbol]) return undefined
+    if (page !== 'favorites' || !selectedSymbol) return undefined
     let active = true
-    api.searchStocks(selectedSymbol)
-      .then((results) => {
-        if (!active) return
-        const exactMatch = results.find((item) => item.symbol === selectedSymbol)
-        if (exactMatch?.name && exactMatch.name !== selectedSymbol) {
-          setFavoriteCompanyNames((current) => ({ ...current, [selectedSymbol]: exactMatch.name }))
-        }
-      })
-      .catch(() => {})
+    setFavoriteDetail(null)
+    api.stockDetail(selectedSymbol)
+      .then((result) => active && setFavoriteDetail(result))
+      .catch(() => active && setFavoriteDetail(null))
     return () => { active = false }
-  }, [page, selectedSymbol, favoriteCompanyNames])
+  }, [page, selectedSymbol])
 
   useEffect(() => {
     setFavoriteNewsPage(0)
@@ -680,7 +675,12 @@ function App() {
               <MoverList title="TOP LOSERS" items={market.losers} tone="down" page={moverPages.losers} setPage={(nextPage) => setMoverPages((pages) => ({ ...pages, losers: nextPage }))} selectedSymbol={selectedSymbol} selectSymbol={navigateStock} previewSymbol={previewSymbolLater} cancelPreview={cancelSymbolPreview} tracked={tracked} trackSymbol={trackSymbol} untrackSymbol={untrackSymbol} />
             </div>
           </div>
-          <MarketChart symbol={selectedSymbol} displayName={favoriteCompanyNames[selectedSymbol] || marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
+          <div className="favorite-chart-stack">
+            <MarketChart symbol={selectedSymbol} displayName={favoriteDetail?.name || marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
+            {favoriteDetail && <div className="favorite-market-stats panel">{[
+              ['OPEN', favoriteDetail.open, 'price'], ['PREVIOUS CLOSE', favoriteDetail.previous_close, 'price'], ['DAY HIGH', favoriteDetail.day_high, 'price'], ['DAY LOW', favoriteDetail.day_low, 'price'], ['VOLUME', favoriteDetail.volume, 'number'], ['MARKET CAP', favoriteDetail.market_cap, 'compact'], ['52W HIGH', favoriteDetail.fifty_two_week_high, 'price'], ['52W LOW', favoriteDetail.fifty_two_week_low, 'price'],
+            ].map(([label, value, format]) => <div key={label}><span>{label}</span><strong>{value == null ? '—' : format === 'price' ? `$${Number(value).toFixed(2)}` : format === 'compact' ? Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(value) : Number(value).toLocaleString()}</strong></div>)}</div>}
+          </div>
         </div>
         <section className="sector-panel panel">
           <div className="sector-heading"><div><p className="eyebrow">SECTOR ETF PROXY</p><h3>Sector performance</h3></div><span>RANKED HIGH TO LOW · CLICK TO EXPLORE</span></div>
