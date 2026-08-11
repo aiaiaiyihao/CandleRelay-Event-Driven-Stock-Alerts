@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -14,3 +16,6 @@ class MarketOverview(BaseModel):
     indexes: list[MarketSnapshot]
     gainers: list[MarketSnapshot]
     losers: list[MarketSnapshot]
+    scope: str = "US large-cap stocks"
+    market_state: str = "CLOSED"
+    updated_at: datetime | None = None

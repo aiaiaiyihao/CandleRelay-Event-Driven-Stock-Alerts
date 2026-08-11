@@ -161,7 +161,7 @@ function App() {
   const [backtest, setBacktest] = useState(SAMPLE_BACKTEST)
   const [alerts, setAlerts] = useState([])
   const [tracked, setTracked] = useState([])
-  const [market, setMarket] = useState({ indexes: [], gainers: [], losers: [] })
+  const [market, setMarket] = useState({ indexes: [], gainers: [], losers: [], scope: 'US large-cap stocks', market_state: 'CLOSED', updated_at: null })
   const [favoriteQuotes, setFavoriteQuotes] = useState([])
   const [favoriteSort, setFavoriteSort] = useState('change_desc')
   const [search, setSearch] = useState('NVDA')
@@ -453,14 +453,14 @@ function App() {
       </section>}
 
       {page === 'dashboard' && <section className="dashboard-section page-surface" id="dashboard">
-        <div className="section-intro"><div><p className="eyebrow">US MARKET COMMAND CENTER</p><h2>Market dashboard</h2></div><p>Major indexes and today's leading large-cap movers. Select any market to inspect its trend.</p></div>
+        <div className="section-intro"><div><p className="eyebrow">US MARKET COMMAND CENTER</p><h2>Market dashboard</h2></div><div className="market-status"><p>Major indexes and today's leading large-cap movers. Select any market to inspect its trend.</p><span className={market.market_state === 'OPEN' ? 'open' : ''}>{market.market_state === 'OPEN' ? 'MARKET OPEN' : 'MARKET CLOSED'}{market.updated_at ? ` · UPDATED ${new Date(market.updated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</span></div></div>
         <div className="index-strip">
           {market.indexes.map((item) => <button key={item.symbol} className={selectedSymbol === item.symbol ? 'selected' : ''} onClick={() => selectMarketSymbol(item.symbol)}><span>{item.name}</span><strong>{item.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong><em className={item.change_percent >= 0 ? 'up' : 'down'}>{item.change_percent >= 0 ? '+' : ''}{item.change_percent.toFixed(2)}%</em></button>)}
         </div>
         <div className="dashboard-grid">
           <div className="mover-panel panel">
             <div className="mover-columns">
-              {[['TOP GAINERS', market.gainers, 'up'], ['TOP LOSERS', market.losers, 'down']].map(([title, items, tone]) => <div className="mover-list" key={title}><h3>{title}<span>TOP 10</span></h3>{items.map((item, index) => <div className={`mover-row ${selectedSymbol === item.symbol ? 'selected' : ''}`} key={item.symbol} onClick={() => selectMarketSymbol(item.symbol)} role="button" tabIndex={0}><span>{String(index + 1).padStart(2, '0')}</span><strong>{item.symbol}</strong><em>${item.price.toFixed(2)}</em><b className={tone}>{item.change_percent >= 0 ? '+' : ''}{item.change_percent.toFixed(2)}%</b><button className={tracked.some((favorite) => favorite.symbol === item.symbol) ? 'star active' : 'star'} onClick={(event) => { event.stopPropagation(); tracked.some((favorite) => favorite.symbol === item.symbol) ? untrackSymbol(item.symbol) : trackSymbol(item.symbol) }} aria-label={`Toggle ${item.symbol} favorite`}>★</button></div>)}</div>)}
+              {[['TOP GAINERS', market.gainers, 'up'], ['TOP LOSERS', market.losers, 'down']].map(([title, items, tone]) => <div className="mover-list" key={title}><h3>{title}<span>US LARGE-CAP · TOP 10</span></h3>{items.map((item, index) => <div className={`mover-row ${selectedSymbol === item.symbol ? 'selected' : ''}`} key={item.symbol} onClick={() => selectMarketSymbol(item.symbol)} role="button" tabIndex={0}><span>{String(index + 1).padStart(2, '0')}</span><strong>{item.symbol}</strong><em>${item.price.toFixed(2)}</em><b className={tone}>{item.change_percent >= 0 ? '+' : ''}{item.change_percent.toFixed(2)}%</b><button className={tracked.some((favorite) => favorite.symbol === item.symbol) ? 'star active' : 'star'} onClick={(event) => { event.stopPropagation(); tracked.some((favorite) => favorite.symbol === item.symbol) ? untrackSymbol(item.symbol) : trackSymbol(item.symbol) }} aria-label={`Toggle ${item.symbol} favorite`}>★</button></div>)}</div>)}
             </div>
           </div>
           <MarketChart symbol={selectedSymbol} displayName={marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />

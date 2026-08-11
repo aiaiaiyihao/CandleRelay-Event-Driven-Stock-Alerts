@@ -40,7 +40,7 @@ produce identical results. This behavior is covered by automated tests.
 - Adaptive 30-minute through maximum-history charts with SMA20, SMA50, and SMA200 overlays
 - Email or phone registration with password hashing and server-side sessions
 - User-owned Favorites with live price, daily change, and sorting
-- US market dashboard with major indexes and daily Top 10 movers
+- US market dashboard with major indexes and screened large-cap daily Top 10 movers
 
 ## Example rule
 
@@ -256,8 +256,10 @@ POST   /favorites
 DELETE /favorites/{symbol}
 ```
 
-The overview batches a curated US large-cap universe to calculate the daily
-Top 10 gainers and losers without requiring a paid market-screener feed.
+The overview uses Yahoo Finance's US large-cap mover screens (approximately
+$2B+ market cap, $5+ share price, and active volume) and recomputes each daily
+change from the current regular-market price and previous close. Results expose
+the market state and update time and are cached briefly to avoid redundant calls.
 Favorites are keyed by authenticated user and symbol, so accounts never share
 saved stocks.
 

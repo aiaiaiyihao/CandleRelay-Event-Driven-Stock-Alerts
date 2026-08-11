@@ -1,7 +1,8 @@
 import yfinance as yf
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone
 import asyncio
+import time
 
 
 CHART_RANGES = {"1mo", "3mo", "6mo", "1y"}
@@ -29,12 +30,8 @@ MARKET_INDEXES = {
     "^DJI": "Dow Jones",
     "^RUT": "Russell 2000",
 }
-LARGE_CAP_UNIVERSE = (
-    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "BRK-B", "JPM",
-    "LLY", "V", "WMT", "XOM", "MA", "COST", "ORCL", "NFLX", "HD", "PG",
-    "JNJ", "ABBV", "BAC", "KO", "CRM", "AMD", "PEP", "TMO", "CSCO", "ACN",
-    "MCD", "IBM", "GE", "CAT", "GS", "AXP", "UBER", "DIS", "QCOM", "INTC",
-)
+MARKET_OVERVIEW_CACHE_SECONDS = 60
+_market_overview_cache: tuple[float, dict] | None = None
 
 #call remote api to fetch price
 async def fetch_price_yfinance(symbol: str):
@@ -223,16 +220,68 @@ def moving_average(values: list[float], period: int) -> list[float | None]:
 
 
 async def fetch_market_overview() -> dict:
-    symbols = [*MARKET_INDEXES, *LARGE_CAP_UNIVERSE]
+    global _market_overview_cache
+    now = time.monotonic()
+    if _market_overview_cache and now - _market_overview_cache[0] < MARKET_OVERVIEW_CACHE_SECONDS:
+        return _market_overview_cache[1]
 
-    snapshots = await fetch_market_snapshots(symbols)
-    indexes = [item for item in snapshots if item["symbol"] in MARKET_INDEXES]
-    stocks = [item for item in snapshots if item["symbol"] not in MARKET_INDEXES]
-    return {
+    indexes, movers = await asyncio.gather(
+        fetch_market_snapshots(list(MARKET_INDEXES)),
+        fetch_market_movers(),
+    )
+    overview = {
         "indexes": indexes,
-        "gainers": sorted(stocks, key=lambda item: item["change_percent"], reverse=True)[:10],
-        "losers": sorted(stocks, key=lambda item: item["change_percent"])[:10],
+        "gainers": movers["gainers"],
+        "losers": movers["losers"],
+        "scope": "US large-cap stocks (market cap $2B+, price $5+, active volume)",
+        "market_state": movers["market_state"],
+        "updated_at": movers["updated_at"],
     }
+    _market_overview_cache = (now, overview)
+    return overview
+
+
+async def fetch_market_movers() -> dict:
+    def load_screens():
+        return yf.screen("day_gainers", count=10), yf.screen("day_losers", count=10)
+
+    try:
+        gainers_screen, losers_screen = await asyncio.to_thread(load_screens)
+    except Exception as exc:
+        raise ValueError(f"yfinance market screener error: {exc}") from exc
+
+    gainers = build_screener_snapshots(gainers_screen.get("quotes", []), descending=True)
+    losers = build_screener_snapshots(losers_screen.get("quotes", []), descending=False)
+    quotes = [*gainers_screen.get("quotes", []), *losers_screen.get("quotes", [])]
+    timestamps = [quote.get("regularMarketTime") for quote in quotes if quote.get("regularMarketTime")]
+    return {
+        "gainers": gainers[:10],
+        "losers": losers[:10],
+        "market_state": "OPEN" if any(quote.get("marketState") == "REGULAR" for quote in quotes) else "CLOSED",
+        "updated_at": datetime.fromtimestamp(max(timestamps), tz=timezone.utc) if timestamps else datetime.now(timezone.utc),
+    }
+
+
+def build_screener_snapshots(quotes: list[dict], descending: bool) -> list[dict]:
+    snapshots = []
+    for quote in quotes:
+        price = quote.get("regularMarketPrice")
+        previous = quote.get("regularMarketPreviousClose")
+        symbol = quote.get("symbol")
+        if not symbol or price is None or not previous:
+            continue
+        change = float(price) - float(previous)
+        snapshots.append(
+            {
+                "symbol": symbol,
+                "name": quote.get("longName") or quote.get("shortName") or symbol,
+                "price": float(price),
+                "change": change,
+                "change_percent": (change / float(previous)) * 100,
+                "sparkline": [float(previous), float(price)],
+            }
+        )
+    return sorted(snapshots, key=lambda item: item["change_percent"], reverse=descending)
 
 
 async def fetch_market_snapshots(symbols: list[str]) -> list[dict]:

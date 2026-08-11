@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.market_router import router
+from app.services.yfinance_service import build_screener_snapshots
 
 
 def test_market_overview_returns_indexes_and_rankings():
@@ -33,3 +34,27 @@ def test_market_quotes_returns_requested_favorite_snapshots():
     assert response.status_code == 200
     assert response.json() == quotes
     fetch.assert_awaited_once_with(["AAPL"])
+
+
+def test_screener_snapshots_recompute_change_from_current_and_previous_prices():
+    quotes = [
+        {
+            "symbol": "AAA",
+            "longName": "Alpha Inc.",
+            "regularMarketPrice": 110,
+            "regularMarketPreviousClose": 100,
+            "regularMarketChangePercent": 999,
+        },
+        {
+            "symbol": "BBB",
+            "regularMarketPrice": 52,
+            "regularMarketPreviousClose": 50,
+        },
+    ]
+
+    snapshots = build_screener_snapshots(quotes, descending=True)
+
+    assert [item["symbol"] for item in snapshots] == ["AAA", "BBB"]
+    assert snapshots[0]["change"] == 10
+    assert snapshots[0]["change_percent"] == 10
+    assert snapshots[0]["sparkline"] == [100, 110]
