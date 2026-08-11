@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from './api'
 
-const SAMPLE_TEXT = '当 NVDA 跌破 SMA20，并且成交量超过过去 20 天平均值的两倍时提醒我。'
+const SAMPLE_TEXT = 'Alert me when NVDA crosses below SMA20 and volume is more than 2 times the average of the past 20 trading days.'
 
 const SAMPLE_DEFINITION = {
   dsl_version: '1.0',
@@ -62,7 +62,7 @@ function Condition({ item, index }) {
 function App() {
   const [text, setText] = useState(SAMPLE_TEXT)
   const [definition, setDefinition] = useState(SAMPLE_DEFINITION)
-  const [warning, setWarning] = useState('No timeframe specified · defaulted to daily bars')
+  const [warning, setWarning] = useState('No timeframe specified - defaulted to daily bars')
   const [ruleId, setRuleId] = useState('')
   const [backtest, setBacktest] = useState(SAMPLE_BACKTEST)
   const [alerts, setAlerts] = useState([])
@@ -82,7 +82,7 @@ function App() {
       const result = await api.compile(text)
       setDefinition(result.definition)
       setWarning(result.warnings?.[0] || '')
-      setMessage('Rule validated · review before activation')
+      setMessage('Rule validated - review before activation')
     } catch (error) {
       setMessage(error.message)
     } finally {
@@ -112,7 +112,7 @@ function App() {
     try {
       const result = await api.runBacktest(ruleId, '2026-07-01T00:00:00Z', '2026-07-23T00:00:00Z')
       setBacktest(result)
-      setMessage(`Backtest completed · ${result.trigger_count} signal found`)
+      setMessage(`Backtest completed - ${result.trigger_count} signal found`)
     } catch (error) {
       setMessage(error.message)
     } finally {
@@ -193,7 +193,7 @@ function App() {
               <polyline className="price-line" points="0,142 80,126 160,132 240,104 320,112 400,79 480,91 560,53 640,65 700,42 750,48 800,146" />
               <circle cx="800" cy="146" r="7" />
             </svg>
-            <span className="signal-label">SIGNAL · JUL 22</span>
+            <span className="signal-label">SIGNAL - JUL 22</span>
           </div>
         </article>
 
@@ -211,7 +211,7 @@ function App() {
         </aside>
       </section>
 
-      <footer><span>SignalForge / Engine v1.0</span><span>Same rule. Live and replay.</span><span>FastAPI · Kafka · PostgreSQL</span></footer>
+      <footer><span>SignalForge / Engine v1.0</span><span>Same rule. Live and replay.</span><span>FastAPI / Kafka / PostgreSQL</span></footer>
     </main>
   )
 }

@@ -14,7 +14,7 @@ def test_compiles_product_example_into_validated_rule_dsl():
     response = client().post(
         "/rules/compile",
         json={
-            "text": "当 NVDA 跌破 SMA20，并且成交量超过过去 20 天平均值的两倍时提醒我。",
+            "text": "Alert me when NVDA crosses below SMA20 and volume is more than 2 times the average of the past 20 trading days.",
             "cooldown_seconds": 3600,
         },
     )
@@ -63,7 +63,7 @@ def test_rejects_text_outside_supported_compiler_grammar():
 def test_compiles_rsi_threshold_rule():
     response = client().post(
         "/rules/compile",
-        json={"text": "当 NVDA RSI14 低于 30 时提醒我"},
+        json={"text": "Alert me when NVDA RSI14 below 30."},
     )
 
     assert response.status_code == 200

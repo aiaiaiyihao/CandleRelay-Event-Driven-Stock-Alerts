@@ -42,7 +42,8 @@ produce identical results. This behavior is covered by automated tests.
 Input:
 
 ```text
-当 NVDA 跌破 SMA20，并且成交量超过过去 20 天平均值的两倍时提醒我。
+Alert me when NVDA crosses below SMA20 and volume is more than 2 times the
+average of the past 20 trading days.
 ```
 
 Compiled DSL:
@@ -155,7 +156,7 @@ POST /rules/compile
 Content-Type: application/json
 
 {
-  "text": "当 NVDA 跌破 SMA20，并且成交量超过过去 20 天平均值的两倍时提醒我。",
+  "text": "Alert me when NVDA crosses below SMA20 and volume is more than 2 times the average of the past 20 trading days.",
   "cooldown_seconds": 3600
 }
 ```
@@ -220,7 +221,7 @@ docker compose -f docker/docker-compose.yml config
 ```
 
 The test suite includes an end-to-end resume demo that compiles the example
-Chinese sentence, stores the rule, imports `examples/nvda_daily.csv`, runs a
+English sentence, stores the rule, imports `examples/nvda_daily.csv`, runs a
 range backtest, and verifies the expected high-volume SMA20 breakdown trigger.
 
 Database changes must be introduced through a new Alembic revision. Application

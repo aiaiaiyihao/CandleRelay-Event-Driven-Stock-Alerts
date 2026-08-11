@@ -18,7 +18,10 @@ def test_resume_demo_flow_from_natural_language_to_backtest_trigger():
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = sessionmaker(bind=engine)()
-    text = "当 NVDA 跌破 SMA20，并且成交量超过过去 20 天平均值的两倍时提醒我。"
+    text = (
+        "Alert me when NVDA crosses below SMA20 and volume is more than "
+        "2 times the average of the past 20 trading days."
+    )
 
     compilation = ValidatedRuleCompiler(HeuristicCompilerProvider()).compile(text)
     rule = create_rule(
