@@ -1,10 +1,12 @@
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.market_router import router
-from app.services.yfinance_service import build_screener_snapshots
+from app.services import yfinance_service
+from app.services.yfinance_service import build_screener_snapshots, fetch_market_overview
 
 
 def test_market_overview_returns_indexes_and_rankings():
@@ -34,6 +36,25 @@ def test_market_overview_can_force_a_refresh():
 
     assert response.status_code == 200
     fetch.assert_awaited_once_with(force_refresh=True)
+
+
+def test_market_overview_returns_last_good_data_when_upstream_fails():
+    stale = {
+        "indexes": [], "gainers": [], "losers": [], "sectors": [],
+        "scope": "Active US-listed stocks", "market_state": "CLOSED",
+        "updated_at": None, "data_source": "yfinance", "data_status": "live",
+    }
+    yfinance_service._market_overview_cache = None
+    with (
+        patch("app.services.yfinance_service.get_cached_json", new=AsyncMock(return_value=stale)),
+        patch("app.services.yfinance_service.fetch_market_snapshots", new=AsyncMock(side_effect=ValueError("upstream failed"))),
+        patch("app.services.yfinance_service.fetch_market_movers", new=AsyncMock(return_value={})),
+        patch("app.services.yfinance_service.fetch_sector_performance", new=AsyncMock(return_value=[])),
+    ):
+        result = asyncio.run(fetch_market_overview(force_refresh=True))
+
+    assert result["data_status"] == "stale"
+    assert result["data_source"] == "yfinance"
 
 
 def test_market_quotes_returns_requested_favorite_snapshots():
@@ -70,3 +91,46 @@ def test_screener_snapshots_recompute_change_from_current_and_previous_prices():
     assert snapshots[0]["change"] == 10
     assert snapshots[0]["change_percent"] == 10
     assert snapshots[0]["sparkline"] == [100, 110]
+
+
+def test_sector_stocks_are_paginated_by_the_api():
+    result = {
+        "sector": "Technology",
+        "slug": "technology",
+        "page": 2,
+        "page_size": 10,
+        "total": 42,
+        "stocks": [{"symbol": "NVDA", "name": "NVIDIA", "price": 190, "change": 5, "change_percent": 2.7, "sparkline": [185, 190]}],
+        "updated_at": None,
+    }
+    app = FastAPI()
+    app.include_router(router)
+    with patch("app.api.market_router.fetch_sector_stocks", new=AsyncMock(return_value=result)) as fetch:
+        response = TestClient(app).get("/market/sectors/technology/stocks?page=2&page_size=10")
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 42
+    fetch.assert_awaited_once_with("technology", 2, 10, "desc")
+
+
+def test_sector_stocks_support_ascending_daily_change():
+    result = {
+        "sector": "Technology", "slug": "technology", "page": 1, "page_size": 10,
+        "total": 0, "stocks": [], "updated_at": None,
+    }
+    app = FastAPI()
+    app.include_router(router)
+    with patch("app.api.market_router.fetch_sector_stocks", new=AsyncMock(return_value=result)) as fetch:
+        response = TestClient(app).get("/market/sectors/technology/stocks?sort_order=asc")
+
+    assert response.status_code == 200
+    fetch.assert_awaited_once_with("technology", 1, 10, "asc")
+
+
+def test_unknown_sector_returns_not_found():
+    app = FastAPI()
+    app.include_router(router)
+    with patch("app.api.market_router.fetch_sector_stocks", new=AsyncMock(side_effect=KeyError)):
+        response = TestClient(app).get("/market/sectors/not-real/stocks")
+
+    assert response.status_code == 404

@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock, patch
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -49,3 +51,21 @@ def test_favorites_require_login_and_can_be_removed():
     web.post("/favorites", json={"symbol": "AAPL"})
     assert web.delete("/favorites/AAPL").status_code == 204
     assert web.get("/favorites").json() == []
+
+
+def test_favorite_news_are_aggregated_for_the_current_user():
+    web = client()
+    register(web, "news@example.com")
+    web.post("/favorites", json={"symbol": "NVDA"})
+    news = [{
+        "title": "NVIDIA launches a platform",
+        "publisher": "Reuters",
+        "published_at": "2026-08-11T18:00:00Z",
+        "url": "https://example.com/nvda",
+    }]
+    with patch("app.api.favorite_router.fetch_stock_news_yfinance", new=AsyncMock(return_value=news)) as fetch:
+        response = web.get("/favorites/news")
+
+    assert response.status_code == 200
+    assert response.json()[0]["symbol"] == "NVDA"
+    fetch.assert_awaited_once_with("NVDA")

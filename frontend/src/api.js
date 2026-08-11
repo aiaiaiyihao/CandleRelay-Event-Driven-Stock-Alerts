@@ -26,8 +26,10 @@ export const api = {
   }),
   logout: () => request('/auth/logout', { method: 'POST' }),
   marketOverview: (refresh = false) => request(`/market/overview${refresh ? '?refresh=true' : ''}`),
+  sectorStocks: (sector, page = 1, sortOrder = 'desc') => request(`/market/sectors/${encodeURIComponent(sector)}/stocks?page=${page}&page_size=10&sort_order=${sortOrder}`),
   marketQuotes: (symbols) => request(`/market/quotes?symbols=${encodeURIComponent(symbols.join(','))}`),
   favorites: () => request('/favorites'),
+  favoriteNews: () => request('/favorites/news'),
   addFavorite: (symbol) => request('/favorites', {
     method: 'POST',
     body: JSON.stringify({ symbol }),
@@ -49,5 +51,6 @@ export const api = {
   acknowledge: (id) => request(`/alerts/${id}/acknowledge`, { method: 'POST' }),
   quote: (symbol) => request(`/prices/latest?symbol=${encodeURIComponent(symbol)}`),
   searchStocks: (query) => request(`/stocks/search?q=${encodeURIComponent(query)}`),
+  stockDetail: (symbol) => request(`/stocks/${encodeURIComponent(symbol)}/detail`),
   chart: (symbol, period) => request(`/stocks/${encodeURIComponent(symbol)}/chart?period=${encodeURIComponent(period)}`),
 }

@@ -2,7 +2,11 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime, timezone
 import asyncio
+import logging
 import time
+
+from app.services.cache import get_cached_json, set_cached_json
+from app.services.alpha_vantage_service import fetch_market_movers_alpha_vantage
 
 
 CHART_RANGES = {"1mo", "3mo", "6mo", "1y"}
@@ -30,7 +34,22 @@ MARKET_INDEXES = {
     "^DJI": "Dow Jones",
     "^RUT": "Russell 2000",
 }
+SECTOR_ETFS = {
+    "technology": ("Technology", "XLK"),
+    "financial-services": ("Financial Services", "XLF"),
+    "healthcare": ("Healthcare", "XLV"),
+    "consumer-cyclical": ("Consumer Cyclical", "XLY"),
+    "communication-services": ("Communication Services", "XLC"),
+    "industrials": ("Industrials", "XLI"),
+    "consumer-defensive": ("Consumer Defensive", "XLP"),
+    "energy": ("Energy", "XLE"),
+    "basic-materials": ("Basic Materials", "XLB"),
+    "real-estate": ("Real Estate", "XLRE"),
+    "utilities": ("Utilities", "XLU"),
+}
 MARKET_OVERVIEW_CACHE_SECONDS = 60
+MARKET_OVERVIEW_LAST_GOOD_KEY = "candlerelay:market-overview:last-good"
+MARKET_OVERVIEW_LAST_GOOD_TTL_SECONDS = 86_400
 _market_overview_cache: tuple[float, dict] | None = None
 
 #call remote api to fetch price
@@ -81,6 +100,89 @@ async def search_stocks_yfinance(query: str, limit: int = 6) -> list[dict]:
     ][:limit]
 
 
+async def fetch_stock_detail_yfinance(symbol: str, force_refresh: bool = False) -> dict:
+    cache_key = f"candlerelay:stock-detail:{symbol.upper()}"
+    if not force_refresh:
+        cached = await get_cached_json(cache_key)
+        if cached is not None:
+            return {**cached, "news": await fetch_stock_news_yfinance(symbol)}
+
+    def load_detail():
+        return yf.Ticker(symbol).info
+
+    try:
+        info = await asyncio.to_thread(load_detail)
+    except Exception as exc:
+        raise ValueError(f"yfinance detail error for symbol '{symbol}': {exc}") from exc
+    price = info.get("regularMarketPrice") or info.get("currentPrice")
+    if price is None:
+        raise ValueError(f"Stock not found for symbol: {symbol}")
+    previous = info.get("regularMarketPreviousClose") or info.get("previousClose")
+    change = float(price) - float(previous) if previous else None
+    timestamp = info.get("regularMarketTime")
+    detail = {
+        "symbol": symbol.upper(),
+        "name": info.get("longName") or info.get("shortName") or symbol.upper(),
+        "exchange": info.get("fullExchangeName") or info.get("exchange"),
+        "currency": info.get("currency"),
+        "sector": info.get("sector"),
+        "industry": info.get("industry"),
+        "price": float(price),
+        "previous_close": float(previous) if previous else None,
+        "change": change,
+        "change_percent": (change / float(previous)) * 100 if previous else None,
+        "open": info.get("regularMarketOpen") or info.get("open"),
+        "day_high": info.get("regularMarketDayHigh") or info.get("dayHigh"),
+        "day_low": info.get("regularMarketDayLow") or info.get("dayLow"),
+        "volume": info.get("regularMarketVolume") or info.get("volume"),
+        "market_cap": info.get("marketCap"),
+        "fifty_two_week_high": info.get("fiftyTwoWeekHigh"),
+        "fifty_two_week_low": info.get("fiftyTwoWeekLow"),
+        "market_state": info.get("marketState"),
+        "updated_at": datetime.fromtimestamp(timestamp, tz=timezone.utc) if timestamp else datetime.now(timezone.utc),
+    }
+    await set_cached_json(cache_key, detail, ttl_seconds=60)
+    return {**detail, "news": await fetch_stock_news_yfinance(symbol, force_refresh=force_refresh)}
+
+
+async def fetch_stock_news_yfinance(symbol: str, force_refresh: bool = False) -> list[dict]:
+    cache_key = f"candlerelay:stock-news:{symbol.upper()}"
+    if not force_refresh:
+        cached = await get_cached_json(cache_key)
+        if cached is not None:
+            return cached
+
+    def load_news():
+        return yf.Ticker(symbol).news
+
+    try:
+        raw_news = await asyncio.to_thread(load_news)
+    except Exception:
+        return []
+
+    news = []
+    for item in raw_news or []:
+        content = item.get("content") or item
+        title = content.get("title")
+        provider = content.get("provider") or {}
+        canonical_url = content.get("canonicalUrl") or {}
+        click_url = content.get("clickThroughUrl") or {}
+        url = canonical_url.get("url") or click_url.get("url") or content.get("link")
+        if not title or not url:
+            continue
+        news.append({
+            "title": title,
+            "publisher": provider.get("displayName") or content.get("publisher") or "Market News",
+            "published_at": content.get("pubDate") or content.get("providerPublishTime"),
+            "url": url,
+        })
+        if len(news) == 5:
+            break
+
+    await set_cached_json(cache_key, news, ttl_seconds=300)
+    return news
+
+
 async def fetch_chart_yfinance(symbol: str, chart_range: str, chart_interval: str = "1d") -> dict:
     if chart_range not in CHART_RANGES:
         raise ValueError(f"Unsupported chart range: {chart_range}")
@@ -117,6 +219,10 @@ async def fetch_chart_preset_yfinance(symbol: str, period: str) -> dict:
     if period not in CHART_PRESETS:
         raise ValueError(f"Unsupported chart period: {period}")
     config = CHART_PRESETS[period]
+    cache_key = f"candlerelay:stock-chart:{symbol.upper()}:{period}"
+    cached = await get_cached_json(cache_key)
+    if cached is not None:
+        return cached
 
     def load_history():
         return yf.Ticker(symbol).history(
@@ -140,12 +246,15 @@ async def fetch_chart_preset_yfinance(symbol: str, period: str) -> dict:
     points = build_chart_points(history)
     if config["points"] is not None:
         points = points[-config["points"]:]
-    return {
+    chart = {
         "symbol": symbol.upper(),
         "range": period,
         "interval": config["interval"],
         "points": points,
     }
+    ttl_seconds = 60 if period in {"30m", "60m", "1d", "1wk"} else 300
+    await set_cached_json(cache_key, chart, ttl_seconds=ttl_seconds)
+    return chart
 
 
 def aggregate_chart_history(history, frequency: str | None = None, rows: int | None = None):
@@ -225,42 +334,65 @@ async def fetch_market_overview(force_refresh: bool = False) -> dict:
     if not force_refresh and _market_overview_cache and now - _market_overview_cache[0] < MARKET_OVERVIEW_CACHE_SECONDS:
         return _market_overview_cache[1]
 
-    indexes, movers = await asyncio.gather(
-        fetch_market_snapshots(list(MARKET_INDEXES)),
-        fetch_market_movers(),
-    )
+    last_good = await get_cached_json(MARKET_OVERVIEW_LAST_GOOD_KEY)
+    try:
+        indexes, movers, sectors = await asyncio.gather(
+            fetch_market_snapshots(list(MARKET_INDEXES)),
+            fetch_market_movers(),
+            fetch_sector_performance(),
+        )
+    except ValueError:
+        if last_good is None:
+            raise
+        stale = {**last_good, "data_status": "stale"}
+        _market_overview_cache = (now, stale)
+        logging.warning("Market overview upstream failed; serving last-known-good Redis data")
+        return stale
     overview = {
         "indexes": indexes,
         "gainers": movers["gainers"],
         "losers": movers["losers"],
-        "scope": "Active US-listed stocks (Nasdaq, NYSE, NYSE American; price $1+, volume 100K+)",
+        "sectors": sectors,
+        "scope": "US market Top 20 fallback" if movers.get("data_source") == "alpha_vantage" else "Active US-listed stocks (Nasdaq, NYSE, NYSE American; price $1+, volume 100K+)",
         "market_state": movers["market_state"],
         "updated_at": movers["updated_at"],
+        "data_source": movers.get("data_source", "yfinance"),
+        "data_status": "fallback" if movers.get("data_source") == "alpha_vantage" else "live",
     }
     _market_overview_cache = (now, overview)
+    await set_cached_json(
+        MARKET_OVERVIEW_LAST_GOOD_KEY,
+        overview,
+        ttl_seconds=MARKET_OVERVIEW_LAST_GOOD_TTL_SECONDS,
+    )
     return overview
 
 
 async def fetch_market_movers() -> dict:
     def load_screens():
-        query = yf.EquityQuery(
-            "and",
-            [
-                yf.EquityQuery("eq", ["region", "us"]),
-                yf.EquityQuery("is-in", ["exchange", "NMS", "NGM", "NCM", "NYQ", "ASE"]),
-                yf.EquityQuery("gte", ["intradayprice", 1]),
-                yf.EquityQuery("gte", ["dayvolume", 100_000]),
-            ],
-        )
+        query = active_us_equity_query()
         return (
             yf.screen(query, size=50, sortField="percentchange", sortAsc=False),
             yf.screen(query, size=50, sortField="percentchange", sortAsc=True),
         )
 
-    try:
-        gainers_screen, losers_screen = await asyncio.to_thread(load_screens)
-    except Exception as exc:
-        raise ValueError(f"yfinance market screener error: {exc}") from exc
+    error = None
+    for attempt in range(3):
+        try:
+            gainers_screen, losers_screen = await asyncio.to_thread(load_screens)
+            break
+        except Exception as exc:
+            error = exc
+            if attempt < 2:
+                await asyncio.sleep(0.4 * (2 ** attempt))
+    else:
+        logging.warning("yfinance market screener failed after 3 attempts; trying Alpha Vantage")
+        try:
+            return await fetch_market_movers_alpha_vantage()
+        except Exception as fallback_error:
+            raise ValueError(
+                f"yfinance market screener error after 3 attempts: {error}; fallback error: {fallback_error}"
+            ) from fallback_error
 
     gainers = build_screener_snapshots(gainers_screen.get("quotes", []), descending=True)
     losers = build_screener_snapshots(losers_screen.get("quotes", []), descending=False)
@@ -271,6 +403,62 @@ async def fetch_market_movers() -> dict:
         "losers": losers[:50],
         "market_state": "OPEN" if any(quote.get("marketState") == "REGULAR" for quote in quotes) else "CLOSED",
         "updated_at": datetime.fromtimestamp(max(timestamps), tz=timezone.utc) if timestamps else datetime.now(timezone.utc),
+        "data_source": "yfinance",
+    }
+
+
+def active_us_equity_query(*extra_conditions):
+    return yf.EquityQuery(
+        "and",
+        [
+            yf.EquityQuery("eq", ["region", "us"]),
+            yf.EquityQuery("is-in", ["exchange", "NMS", "NGM", "NCM", "NYQ", "ASE"]),
+            yf.EquityQuery("gte", ["intradayprice", 1]),
+            yf.EquityQuery("gte", ["dayvolume", 100_000]),
+            *extra_conditions,
+        ],
+    )
+
+
+async def fetch_sector_performance() -> list[dict]:
+    by_symbol = {symbol: (slug, name) for slug, (name, symbol) in SECTOR_ETFS.items()}
+    snapshots = await fetch_market_snapshots(list(by_symbol))
+    sectors = [
+        {**snapshot, "slug": by_symbol[snapshot["symbol"]][0], "name": by_symbol[snapshot["symbol"]][1]}
+        for snapshot in snapshots
+        if snapshot["symbol"] in by_symbol
+    ]
+    return sorted(sectors, key=lambda item: item["change_percent"], reverse=True)
+
+
+async def fetch_sector_stocks(sector_slug: str, page: int, page_size: int, sort_order: str = "desc") -> dict:
+    sector_name, _ = SECTOR_ETFS[sector_slug]
+    descending = sort_order == "desc"
+    query = active_us_equity_query(yf.EquityQuery("eq", ["sector", sector_name]))
+
+    def load_screen():
+        return yf.screen(
+            query,
+            offset=(page - 1) * page_size,
+            size=page_size,
+            sortField="percentchange",
+            sortAsc=not descending,
+        )
+
+    try:
+        screen = await asyncio.to_thread(load_screen)
+    except Exception as exc:
+        raise ValueError(f"yfinance sector screener error: {exc}") from exc
+    quotes = screen.get("quotes", [])
+    timestamps = [quote.get("regularMarketTime") for quote in quotes if quote.get("regularMarketTime")]
+    return {
+        "sector": sector_name,
+        "slug": sector_slug,
+        "page": page,
+        "page_size": page_size,
+        "total": screen.get("total", 0),
+        "stocks": build_screener_snapshots(quotes, descending=descending),
+        "updated_at": datetime.fromtimestamp(max(timestamps), tz=timezone.utc) if timestamps else None,
     }
 
 

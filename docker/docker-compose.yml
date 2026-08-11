@@ -62,6 +62,7 @@ services:
       DATABASE_URL: postgresql://admin:admin@db:5432/marketdb
       REDIS_URL: redis://redis:6379/0
       KAFKA_BOOTSTRAP: kafka:29092
+      ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY:-}
     ports:
       - "8000:8000"
     depends_on:
