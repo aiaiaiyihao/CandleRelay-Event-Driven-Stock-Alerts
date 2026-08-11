@@ -189,6 +189,7 @@ function App() {
       const result = await api.quote(symbol)
       setQuote(result)
       setSearch(result.symbol)
+      setSelectedSymbol(result.symbol)
       setSearchMessage('Latest quote from yfinance')
     } catch (error) {
       setSearchMessage(error.message)
