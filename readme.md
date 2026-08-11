@@ -1,6 +1,6 @@
-# SignalForge
+# [CandleRelay](https://github.com/aiaiaiyihao/CandleRelay-Event-Driven-Stock-Alerts)
 
-SignalForge is an event-driven stock alerting and strategy backtesting platform.
+CandleRelay is an event-driven stock alerting and strategy backtesting platform.
 Users describe market conditions in natural language, review the compiled and
 validated Rule DSL, and run the same rule against live Kafka events or historical
 market bars. A React dashboard turns this workflow into a focused, interactive
@@ -85,7 +85,7 @@ docker compose -f docker/docker-compose.yml up -d
 
 This starts PostgreSQL, Redis, Kafka, the API, the live rule worker, and the
 React frontend. The API container applies Alembic migrations before serving
-traffic. SignalForge uses its own `signalforge_pgdata` volume so older local
+traffic. CandleRelay uses the existing `signalforge_pgdata` volume so older local
 PostgreSQL projects do not interfere with the demo credentials.
 
 Open:

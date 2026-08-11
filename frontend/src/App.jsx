@@ -378,9 +378,9 @@ function App() {
   return (
     <main>
       <header className="topbar">
-        <a className="brand" href="/dashboard" onClick={(event) => { event.preventDefault(); navigate('dashboard') }} aria-label="SignalForge home">
-          <span className="brand-mark">SF</span>
-          <span>SignalForge</span>
+        <a className="brand" href="https://github.com/aiaiaiyihao/CandleRelay-Event-Driven-Stock-Alerts" target="_blank" rel="noreferrer" aria-label="CandleRelay on GitHub">
+          <span className="brand-mark">CR</span>
+          <span>CandleRelay</span>
         </a>
         <nav className="product-nav" aria-label="Product navigation">
           {[['dashboard', 'Dashboard'], ['favorites', 'My Favorites'], ['rule-studio', 'Rule Studio']].map(([route, label]) => <a className={page === route ? 'active' : ''} href={`/${route}`} key={route} onClick={(event) => { event.preventDefault(); navigate(route) }}>{label}</a>)}
@@ -398,7 +398,7 @@ function App() {
         <div className="auth-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setAuthOpen(false)}>
           <section className="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-title">
             <button className="auth-close" onClick={() => setAuthOpen(false)} aria-label="Close account dialog">×</button>
-            <p className="eyebrow">PERSONAL SIGNALFORGE ACCOUNT</p>
+            <p className="eyebrow">PERSONAL CANDLERELAY ACCOUNT</p>
             <h2 id="auth-title">{authMode === 'login' ? 'Welcome back.' : 'Create your account.'}</h2>
             <p className="auth-copy">Use an email address or phone number to keep your market workspace personal.</p>
             <div className="auth-tabs">
@@ -625,7 +625,7 @@ function App() {
       </section>
       </>}
 
-      <footer><span>SignalForge / Engine v1.0</span><span>Same rule. Live and replay.</span><span>FastAPI / Kafka / PostgreSQL</span></footer>
+      <footer><span>CandleRelay / Engine v1.0</span><span>Same rule. Live and replay.</span><span>FastAPI / Kafka / PostgreSQL</span></footer>
     </main>
   )
 }

@@ -6,7 +6,7 @@ from sqlalchemy.orm.decl_api import declarative_base
 from sqlalchemy.orm.session import sessionmaker
 
 
-APP_NAME = os.getenv("APP_NAME", "SignalForge")
+APP_NAME = os.getenv("APP_NAME", "CandleRelay")
 APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
 APP_DEBUG = os.getenv("APP_DEBUG", "false").lower() in {"1", "true", "yes"}
 CORS_ORIGINS = [
