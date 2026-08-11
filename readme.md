@@ -1,179 +1,260 @@
-# Market‑Data‑Service
+# SignalForge
 
-A production‑ready micro‑service that pulls real‑time stock prices from **yfinance**, streams raw ticks through **Kafka**, calculates 5‑point moving averages, and serves everything via a **FastAPI** REST API.
+SignalForge is an event-driven stock alerting and strategy backtesting platform.
+Users describe market conditions in natural language, review the compiled and
+validated Rule DSL, and run the same rule against live Kafka events or historical
+market bars. A React dashboard turns this workflow into a focused, interactive
+demo suitable for portfolio and interview presentations.
 
----
+## Core invariant
 
-## Features
+Live evaluation and historical replay share the same components:
 
-| Layer      | Tech                               | Purpose                                                                  |
-| ---------- | ---------------------------------- | ------------------------------------------------------------------------ |
-| Data Fetch | `yfinance`                         | Pull latest price quotes                                                 |
-| Storage    | **PostgreSQL**                     | Persist raw ticks & computed MAs                                         |
-| Cache      | **Redis**                          | 100‑second hot‑cache for `/prices/latest`                                |
-| Stream     | **Kafka + confluent‑kafka‑python** | Publish raw updates (`price‑events`)                                     |
-| Consumer   | Async worker                       | Compute 5‑MA → `symbol_averages`                                         |
-| API        | **FastAPI**                        | `GET /prices/latest`, `POST /prices/poll`, `POST /prices/poll/stop/{id}` |
-| DevOps     | Docker Compose + GitHub Actions    | CI lint/tests, container build                                           |
-
----
-
-## Repo Layout
-
-```
-market-data-service/
-├── app/
-│   ├── api/          # FastAPI routers
-│   ├── core/         # settings, DB, Redis, Kafka cfg
-│   ├── models/       # SQLAlchemy ORM models
-│   ├── services/     # polling, provider, consumer logic
-│   └── schemas/      # Pydantic request/response models
-├── tests/            # pytest suite (unit + integration)
-├── docker/           # Dockerfile & compose overrides
-├── docs/             # Architecture diagrams
-└── .github/workflows/ci.yml
+```text
+Natural language -> validated Rule DSL
+                              |
+Live Kafka MarketEvent -------+--> IndicatorEngine --> RuleEvaluator --> Alert
+Historical MarketEvent replay +--> IndicatorEngine --> RuleEvaluator --> Backtest
 ```
 
----
+Given the same ordered events and rule version, live and replay evaluation must
+produce identical results. This behavior is covered by automated tests.
 
-## Quick‑start (local)
+## Implemented capabilities
+
+- Versioned, strictly validated Rule DSL
+- AND condition groups and comparison/cross operators
+- Normalized, timezone-aware OHLCV `MarketEvent`
+- Incremental SMA and volume-ratio indicators
+- Explainable condition results with actual left and right values
+- Trigger transition and cooldown behavior
+- Versioned rule persistence and history
+- Historical event replay and persisted backtest summaries
+- Kafka market-event codec and manual-offset consumer
+- Database-backed alert deduplication and cooldown
+- Alert listing, filtering, and acknowledgement
+- Deterministic Chinese and English natural-language compiler
+- Alembic-managed database schema
+- Responsive React rule, backtest, and alert dashboard
+
+## Example rule
+
+Input:
+
+```text
+Alert me when NVDA crosses below SMA20 and volume is more than 2 times the
+average of the past 20 trading days.
+```
+
+Compiled DSL:
+
+```json
+{
+  "dsl_version": "1.0",
+  "symbol": "NVDA",
+  "timeframe": "1d",
+  "conditions": {
+    "all": [
+      {
+        "left": {"type": "metric", "metric": "price"},
+        "operator": "crosses_below",
+        "right": {"type": "indicator", "indicator": "sma", "period": 20}
+      },
+      {
+        "left": {"type": "indicator", "indicator": "volume_ratio", "period": 20},
+        "operator": ">",
+        "right": {"type": "value", "value": 2}
+      }
+    ]
+  },
+  "trigger": "on_false_to_true",
+  "cooldown_seconds": 3600
+}
+```
+
+## Local setup
 
 ```bash
-# 1. clone private repo
-$ git clone git@github.com:aiaiaiyihao/market-data-service.git
-$ cd market-data-service
-
-# 2. spin up infra (Postgres, Redis, Kafka, FastAPI)
-$ docker-compose up --build
-
-# 3. hit swagger
-open http://localhost:8000/docs
-```
-
-<details>
-<summary>Ports</summary>
-
-| Service             | Port |
-| ------------------- | ---- |
-| FastAPI             | 8000 |
-| PostgreSQL          | 5432 |
-| Redis               | 6379 |
-| Kafka Broker        | 9092 |
-| Kafka UI (optional) | 8081 |
-
-</details>
-
----
-
-## Manual dev venv
-
-```bash
-python -m venv venv && source venv/bin/activate
+python -m venv marketDataServer
+source marketDataServer/bin/activate
 pip install -r requirements/dev.txt
+docker compose -f docker/docker-compose.yml up -d
+```
+
+This starts PostgreSQL, Redis, Kafka, the API, the live rule worker, and the
+React frontend. The API container applies Alembic migrations before serving
+traffic. SignalForge uses its own `signalforge_pgdata` volume so older local
+PostgreSQL projects do not interfere with the demo credentials.
+
+Open:
+
+| Surface | URL |
+| --- | --- |
+| SignalForge dashboard | <http://localhost:3000> |
+| FastAPI Swagger | <http://localhost:8000/docs> |
+| API health check | <http://localhost:8000/health> |
+
+For manual development without the API and worker containers:
+
+```bash
+alembic upgrade head
 uvicorn app.main:app --reload
+python -m app.kafka.SignalConsumer
 ```
 
-Environment vars (see `.env.example`):
+Import the included demo bars when running the services manually:
 
+```bash
+python -m scripts.import_market_bars examples/nvda_daily.csv \
+  --symbol NVDA --timeframe 1d --source demo
 ```
+
+Configuration:
+
+```text
 DATABASE_URL=postgresql://admin:admin@localhost:5432/marketdb
 REDIS_URL=redis://localhost:6379/0
 KAFKA_BOOTSTRAP=localhost:9092
+KAFKA_SIGNAL_GROUP=signalforge-live-rules
+CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 ```
 
----
+## React dashboard
 
-## 📑 API Reference
+The dashboard is intentionally centered on the project's differentiating flow:
 
-### `GET /prices/latest`
+1. Write a market rule in natural language.
+2. Compile it into a validated and explainable Rule DSL.
+3. Review and activate the versioned rule.
+4. Replay stored market bars and inspect forward returns.
+5. View and acknowledge alerts produced by the live Kafka worker.
 
-| Query      | Type | Required | Default    |
-| ---------- | ---- | -------- | ---------- |
-| `symbol`   | str  | ✅        | –          |
-| `provider` | str  | ❌        | `yfinance` |
+The UI uses realistic sample content on first render so the project remains
+presentable before the local services are started. Actions use the real FastAPI
+endpoints whenever the backend is available.
 
-**200**
-
-```json
-{
-  "symbol": "AAPL",
-  "price": 189.31,
-  "timestamp": "2025-06-15T18:22:01Z",
-  "provider": "yfinance"
-}
-```
-
-### `POST /prices/poll`
-
-```json
-{
-  "symbols": ["AAPL", "MSFT"],
-  "interval": 60,
-  "provider": "yfinance"
-}
-```
-
-**202 Accepted**
-
-```json
-{
-  "job_id": "poll_abc123",
-  "status": "accepted",
-  "config": {
-    "symbols": ["AAPL", "MSFT"],
-    "interval": 60,
-    "provider": "yfinance"
-  }
-}
-```
-
-### `POST /prices/poll/stop/{job_id}`
-
-Stops a running poll.
-
----
-
-### ❗ Error Codes
-
-| Code | Reason                               |
-| ---- | ------------------------------------ |
-| 400  | invalid provider / duplicate symbols |
-| 404  | symbol or job not found              |
-| 429  | rate‑limit (future)                  |
-| 500  | unexpected error                     |
-
----
-
-## 🏗️ Architecture Decisions
-
-* **Single‑table raw ticks** → simplifies Kafka producer and MA consumer.
-* **JSON column for `symbols`** in `poll_jobs` → easy to extend to arbitrary symbol sets.
-* **Composite indexes** on `(symbol, timestamp)` for fast look‑ups and MAs.
-* **Idempotent Kafka producer** → safe retries.
-* **Graceful shutdown** via FastAPI `lifespan` → flush Kafka, close Redis.
-
-See full diagrams in [`docs/`](docs).
-
----
-
-## Docker
+Run the frontend separately during development:
 
 ```bash
-# Build only API container
-$ docker build -t market-api -f docker/Dockerfile .
-
-# Full stack
-$ docker-compose up -d --build
+cd frontend
+npm install
+npm run dev
 ```
 
----
+Set a different API origin in `frontend/.env` when needed:
 
-## Troubleshooting
+```text
+VITE_API_URL=http://localhost:8000
+```
 
-| Symptom                                         | Fix                                                                   |
-| ----------------------------------------------- | --------------------------------------------------------------------- |
-| `Symbol already polling`                        | Stop existing job: `POST /prices/poll/stop/{id}`                      |
-| Kafka `Broker not available`                    | Ensure Kafka & ZooKeeper containers healthy; restart `docker-compose` |
-| `psycopg2.errors.DuplicateTable` on dev restart | Delete old index or remove `Base.metadata.drop_all()` in `main.py`    |
-| Infinite retries in CI                          | Update `.github/workflows/ci.yml` Postgres health‑check timeout       |
+## API overview
 
+### Compile natural language
+
+```http
+POST /rules/compile
+Content-Type: application/json
+
+{
+  "text": "Alert me when NVDA crosses below SMA20 and volume is more than 2 times the average of the past 20 trading days.",
+  "cooldown_seconds": 3600
+}
+```
+
+Compilation returns a candidate DSL, an explanation, and ambiguity warnings. It
+does not enable the rule automatically. Submit the reviewed definition to
+`POST /rules`.
+
+### Rules
+
+```text
+POST  /rules
+GET   /rules
+GET   /rules/{rule_id}
+PUT   /rules/{rule_id}
+GET   /rules/{rule_id}/versions
+PATCH /rules/{rule_id}/status
+```
+
+### Backtests
+
+```text
+POST /backtests
+POST /backtests/range
+GET  /backtests/{run_id}
+```
+
+`POST /backtests` accepts normalized events inline. `POST /backtests/range`
+loads previously imported bars using a rule ID and timezone-aware start/end
+timestamps.
+
+### Alerts
+
+```text
+GET  /alerts
+GET  /alerts?rule_id={rule_id}&acknowledged=false
+POST /alerts/{alert_id}/acknowledge
+```
+
+### Legacy price endpoints
+
+```text
+GET  /prices/latest
+POST /prices/poll
+```
+
+These endpoints remain available during the migration from the original market
+data service. New real-time integrations should publish validated OHLCV events to
+the Kafka `market-events` topic.
+
+## Development
+
+```bash
+# Backend tests
+pytest -q
+
+# Frontend production build
+npm --prefix frontend run build
+
+# Validate the complete container stack
+docker compose -f docker/docker-compose.yml config
+```
+
+The test suite includes an end-to-end resume demo that compiles the example
+English sentence, stores the rule, imports `examples/nvda_daily.csv`, runs a
+range backtest, and verifies the expected high-volume SMA20 breakdown trigger.
+
+Database changes must be introduced through a new Alembic revision. Application
+startup deliberately does not call SQLAlchemy `drop_all()` or `create_all()`.
+
+## Project structure
+
+```text
+app/
+├── api/             FastAPI rule, backtest, alert, and price routes
+├── backtesting/     Historical event replay and forward-return metrics
+├── compilers/       Natural-language compiler boundary and local compiler
+├── domain/          Rule DSL and normalized MarketEvent
+├── indicators/      Incremental SMA, EMA, RSI, and volume ratio
+├── kafka/           Market-event codec, producer, and live worker
+├── models/          SQLAlchemy persistence models
+└── services/        Rule, alert, market data, and backtest workflows
+
+frontend/            React + Vite dashboard
+migrations/          Alembic schema history
+examples/            Importable NVDA demonstration data
+docker/              API image and complete Compose stack
+tests/               Unit, API, replay-parity, and end-to-end demo tests
+```
+
+## Resume talking points
+
+- Designed one deterministic rule engine shared by Kafka live processing and
+  historical replay, preventing semantic drift between alerts and backtests.
+- Compiled natural-language market conditions into a versioned Pydantic DSL
+  with strict validation and explainable per-condition results.
+- Built incremental technical indicators and durable alert deduplication and
+  cooldown handling using PostgreSQL, Redis-ready configuration, and Kafka
+  manual offset commits.
+- Delivered a Dockerized FastAPI and React application with Alembic migrations,
+  reproducible demo data, and comprehensive automated tests.

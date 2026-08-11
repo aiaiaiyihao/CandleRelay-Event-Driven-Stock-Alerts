@@ -3,6 +3,8 @@ import json
 import uuid
 import logging
 from app.core.config import producer_config
+from app.domain.events import MarketEvent
+from app.kafka.market_events import encode_market_event
 
 # Initialize Kafka producer
 # config includes retry settings
@@ -40,3 +42,13 @@ def send_price_event(data: dict):
     except Exception as e:
         logging.exception(f"[KAFKA] Exception while sending event: {e}")
 
+
+def send_market_event(event: MarketEvent) -> None:
+    """Publish a validated OHLCV event for SignalForge rule evaluation."""
+    producer.produce(
+        topic="market-events",
+        key=f"{event.symbol}:{event.timeframe}",
+        value=encode_market_event(event),
+        callback=delivery_report,
+    )
+    producer.poll(0)

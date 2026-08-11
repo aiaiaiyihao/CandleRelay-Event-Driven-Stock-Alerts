@@ -1,0 +1,98 @@
+import pytest
+
+from app.domain.events import MarketEvent
+from app.indicators.engine import IndicatorEngine
+
+
+def market_event(day: int, close: int, volume: int, symbol: str = "NVDA"):
+    return MarketEvent.model_validate(
+        {
+            "symbol": symbol,
+            "timeframe": "1d",
+            "timestamp": f"2026-08-{day:02d}T20:00:00Z",
+            "open": close,
+            "high": close,
+            "low": close,
+            "close": close,
+            "volume": volume,
+            "source": "test",
+        }
+    )
+
+
+def test_computes_sma_with_current_bar_and_volume_ratio_against_prior_bars():
+    engine = IndicatorEngine()
+
+    assert engine.update(market_event(1, 10, 100), [2]).get("sma", 2) is None
+    second = engine.update(market_event(2, 20, 100), [2])
+    third = engine.update(market_event(3, 30, 300), [2])
+
+    assert second.get("sma", 2) == 15
+    assert second.get("volume_ratio", 2) is None
+    assert third.get("sma", 2) == 25
+    assert third.get("volume_ratio", 2) == 3
+
+
+def test_keeps_symbol_state_isolated():
+    engine = IndicatorEngine()
+
+    engine.update(market_event(1, 10, 100, "NVDA"), [2])
+    result = engine.update(market_event(2, 50, 100, "AAPL"), [2])
+
+    assert result.get("sma", 2) is None
+
+
+def test_rejects_period_beyond_configured_history():
+    engine = IndicatorEngine(max_period=20)
+
+    try:
+        engine.update(market_event(1, 10, 100), [21])
+    except ValueError as exc:
+        assert "between 1 and 20" in str(exc)
+    else:
+        raise AssertionError("expected invalid period to be rejected")
+
+
+def test_seeds_ema_with_sma_then_updates_incrementally():
+    engine = IndicatorEngine()
+
+    first = engine.update(market_event(1, 10, 100), [3])
+    second = engine.update(market_event(2, 20, 100), [3])
+    seeded = engine.update(market_event(3, 30, 100), [3])
+    updated = engine.update(market_event(4, 40, 100), [3])
+
+    assert first.get("ema", 3) is None
+    assert second.get("ema", 3) is None
+    assert seeded.get("ema", 3) == 20
+    assert updated.get("ema", 3) == 30
+
+
+def test_keeps_ema_state_isolated_by_symbol():
+    engine = IndicatorEngine()
+    for day, close in enumerate([10, 20, 30], start=1):
+        engine.update(market_event(day, close, 100, "NVDA"), [3])
+
+    apple = engine.update(market_event(4, 100, 100, "AAPL"), [3])
+
+    assert apple.get("ema", 3) is None
+
+
+def test_calculates_wilder_rsi_incrementally():
+    engine = IndicatorEngine()
+    snapshots = [
+        engine.update(market_event(day, close, 100), [3])
+        for day, close in enumerate([10, 11, 12, 13, 12], start=1)
+    ]
+
+    assert snapshots[2].get("rsi", 3) is None
+    assert snapshots[3].get("rsi", 3) == 100
+    assert float(snapshots[4].get("rsi", 3)) == pytest.approx(66.6666667)
+
+
+def test_returns_neutral_rsi_for_a_flat_market():
+    engine = IndicatorEngine()
+    snapshot = None
+    for day in range(1, 5):
+        snapshot = engine.update(market_event(day, 10, 100), [3])
+
+    assert snapshot.get("rsi", 3) == 50

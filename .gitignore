@@ -4,3 +4,5 @@ venv/
 .env
 .DS_Store
 marketDataServer/
+frontend/node_modules/
+frontend/dist/
