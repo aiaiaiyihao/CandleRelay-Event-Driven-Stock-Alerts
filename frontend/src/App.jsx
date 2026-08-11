@@ -298,6 +298,10 @@ function App() {
   const marketBySymbol = useMemo(() => Object.fromEntries(
     [...market.indexes, ...market.gainers, ...market.losers, ...favoriteQuotes].map((item) => [item.symbol, item]),
   ), [market, favoriteQuotes])
+  const rankedSectors = useMemo(
+    () => [...market.sectors].sort((left, right) => (right.change_percent ?? -Infinity) - (left.change_percent ?? -Infinity)),
+    [market.sectors],
+  )
   const sortedFavorites = useMemo(() => [...tracked].sort((left, right) => {
     const leftMarket = marketBySymbol[left.symbol]
     const rightMarket = marketBySymbol[right.symbol]
@@ -553,8 +557,8 @@ function App() {
           <MarketChart symbol={selectedSymbol} displayName={marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
         </div>
         <section className="sector-panel panel">
-          <div className="sector-heading"><div><p className="eyebrow">SECTOR ETF PROXY</p><h3>Sector performance</h3></div><span>11 US MARKET SECTORS · CLICK TO EXPLORE</span></div>
-          <div className="sector-grid">{market.sectors.map((sector, index) => <button key={sector.slug} onClick={() => navigateSector(sector.slug)}><span>{String(index + 1).padStart(2, '0')}</span><div><strong>{sector.name}</strong><small>{sector.symbol}</small></div><b className={sector.change_percent >= 0 ? 'up' : 'down'}>{sector.change_percent >= 0 ? '+' : ''}{sector.change_percent.toFixed(2)}%</b></button>)}</div>
+          <div className="sector-heading"><div><p className="eyebrow">SECTOR ETF PROXY</p><h3>Sector performance</h3></div><span>RANKED HIGH TO LOW · CLICK TO EXPLORE</span></div>
+          <div className="sector-grid">{rankedSectors.map((sector, index) => <button key={sector.slug} onClick={() => navigateSector(sector.slug)}><span>{String(index + 1).padStart(2, '0')}</span><div><strong>{sector.name}</strong><small>{sector.symbol}</small></div><b className={sector.change_percent >= 0 ? 'up' : 'down'}>{sector.change_percent >= 0 ? '+' : ''}{sector.change_percent.toFixed(2)}%</b></button>)}</div>
         </section>
       </section>}
 
