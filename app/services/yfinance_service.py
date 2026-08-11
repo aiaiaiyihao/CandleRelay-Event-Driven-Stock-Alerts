@@ -233,7 +233,7 @@ async def fetch_market_overview() -> dict:
         "indexes": indexes,
         "gainers": movers["gainers"],
         "losers": movers["losers"],
-        "scope": "US large-cap stocks (market cap $2B+, price $5+, active volume)",
+        "scope": "Active US-listed stocks (Nasdaq, NYSE, NYSE American; price $1+, volume 100K+)",
         "market_state": movers["market_state"],
         "updated_at": movers["updated_at"],
     }
@@ -243,7 +243,19 @@ async def fetch_market_overview() -> dict:
 
 async def fetch_market_movers() -> dict:
     def load_screens():
-        return yf.screen("day_gainers", count=10), yf.screen("day_losers", count=10)
+        query = yf.EquityQuery(
+            "and",
+            [
+                yf.EquityQuery("eq", ["region", "us"]),
+                yf.EquityQuery("is-in", ["exchange", "NMS", "NGM", "NCM", "NYQ", "ASE"]),
+                yf.EquityQuery("gte", ["intradayprice", 1]),
+                yf.EquityQuery("gte", ["dayvolume", 100_000]),
+            ],
+        )
+        return (
+            yf.screen(query, size=10, sortField="percentchange", sortAsc=False),
+            yf.screen(query, size=10, sortField="percentchange", sortAsc=True),
+        )
 
     try:
         gainers_screen, losers_screen = await asyncio.to_thread(load_screens)
