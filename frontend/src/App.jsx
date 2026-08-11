@@ -247,6 +247,7 @@ function App() {
   const [ruleId, setRuleId] = useState('')
   const [backtest, setBacktest] = useState(SAMPLE_BACKTEST)
   const [alerts, setAlerts] = useState([])
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [tracked, setTracked] = useState([])
   const [market, setMarket] = useState({ indexes: [], gainers: [], losers: [], sectors: [], scope: 'Active US-listed stocks', market_state: 'CLOSED', updated_at: null, data_source: 'yfinance', data_status: 'live' })
   const [moverPages, setMoverPages] = useState({ gainers: 0, losers: 0 })
@@ -282,8 +283,23 @@ function App() {
     }
     api.me().then(setUser).catch(() => {})
     api.marketOverview().then(setMarket).catch(() => {})
-    api.alerts().then(setAlerts).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (!user) {
+      setAlerts([])
+      setNotificationsOpen(false)
+      return undefined
+    }
+    let active = true
+    const loadAlerts = () => api.alerts().then((items) => active && setAlerts(items)).catch(() => {})
+    loadAlerts()
+    const interval = window.setInterval(loadAlerts, 30_000)
+    return () => {
+      active = false
+      window.clearInterval(interval)
+    }
+  }, [user])
 
   useEffect(() => () => {
     window.clearTimeout(previewTimer.current)
@@ -648,7 +664,7 @@ function App() {
         </nav>
         <div className="account-actions">
           {user ? (
-            <><span>{user.identifier}</span><button onClick={logout}>Sign out</button></>
+            <><span>{user.identifier}</span><div className="notification-center"><button className="notification-trigger" onClick={() => setNotificationsOpen((value) => !value)} aria-label={`${alerts.length} unread alerts`} aria-expanded={notificationsOpen}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>{alerts.length > 0 && <b>{alerts.length > 99 ? '99+' : alerts.length}</b>}</button>{notificationsOpen && <div className="notification-panel"><div className="notification-heading"><strong>ALERTS</strong><span>{alerts.length} UNREAD</span></div><div className="notification-list">{alerts.length ? alerts.slice(0, 8).map((alert) => <article key={alert.id}><button onClick={() => { setSelectedSymbol(alert.symbol); navigate('rule-studio'); setNotificationsOpen(false) }}><strong>{alert.symbol}</strong><span>Rule v{alert.rule_version} triggered</span><time>{new Date(alert.market_timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time></button><button className="notification-read" onClick={() => api.acknowledge(alert.id).then(() => setAlerts((items) => items.filter((item) => item.id !== alert.id)))} aria-label={`Mark ${alert.symbol} alert as read`}>×</button></article>) : <div className="notification-empty">NO NEW ALERTS</div>}</div></div>}</div><button onClick={logout}>Sign out</button></>
           ) : (
             <button className="sign-in-button" onClick={() => setAuthOpen(true)}>Sign in / Register</button>
           )}
