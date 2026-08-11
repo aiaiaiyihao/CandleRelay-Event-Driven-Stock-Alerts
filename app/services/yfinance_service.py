@@ -6,6 +6,7 @@ import logging
 import time
 
 from app.services.cache import get_cached_json, set_cached_json
+from app.services.alpha_vantage_service import fetch_market_movers_alpha_vantage
 
 
 CHART_RANGES = {"1mo", "3mo", "6mo", "1y"}
@@ -352,11 +353,11 @@ async def fetch_market_overview(force_refresh: bool = False) -> dict:
         "gainers": movers["gainers"],
         "losers": movers["losers"],
         "sectors": sectors,
-        "scope": "Active US-listed stocks (Nasdaq, NYSE, NYSE American; price $1+, volume 100K+)",
+        "scope": "US market Top 20 fallback" if movers.get("data_source") == "alpha_vantage" else "Active US-listed stocks (Nasdaq, NYSE, NYSE American; price $1+, volume 100K+)",
         "market_state": movers["market_state"],
         "updated_at": movers["updated_at"],
-        "data_source": "yfinance",
-        "data_status": "live",
+        "data_source": movers.get("data_source", "yfinance"),
+        "data_status": "fallback" if movers.get("data_source") == "alpha_vantage" else "live",
     }
     _market_overview_cache = (now, overview)
     await set_cached_json(
@@ -385,7 +386,13 @@ async def fetch_market_movers() -> dict:
             if attempt < 2:
                 await asyncio.sleep(0.4 * (2 ** attempt))
     else:
-        raise ValueError(f"yfinance market screener error after 3 attempts: {error}") from error
+        logging.warning("yfinance market screener failed after 3 attempts; trying Alpha Vantage")
+        try:
+            return await fetch_market_movers_alpha_vantage()
+        except Exception as fallback_error:
+            raise ValueError(
+                f"yfinance market screener error after 3 attempts: {error}; fallback error: {fallback_error}"
+            ) from fallback_error
 
     gainers = build_screener_snapshots(gainers_screen.get("quotes", []), descending=True)
     losers = build_screener_snapshots(losers_screen.get("quotes", []), descending=False)
@@ -396,6 +403,7 @@ async def fetch_market_movers() -> dict:
         "losers": losers[:50],
         "market_state": "OPEN" if any(quote.get("marketState") == "REGULAR" for quote in quotes) else "CLOSED",
         "updated_at": datetime.fromtimestamp(max(timestamps), tz=timezone.utc) if timestamps else datetime.now(timezone.utc),
+        "data_source": "yfinance",
     }
 
 

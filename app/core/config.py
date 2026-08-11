@@ -9,6 +9,7 @@ from sqlalchemy.orm.session import sessionmaker
 APP_NAME = os.getenv("APP_NAME", "CandleRelay")
 APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
 APP_DEBUG = os.getenv("APP_DEBUG", "false").lower() in {"1", "true", "yes"}
+ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY", "")
 CORS_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
