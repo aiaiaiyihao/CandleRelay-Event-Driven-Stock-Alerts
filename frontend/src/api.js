@@ -43,6 +43,12 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ name, definition }),
   }),
+  rules: () => request('/rules'),
+  setRuleEnabled: (id, enabled) => request(`/rules/${encodeURIComponent(id)}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ enabled }),
+  }),
+  deleteRule: (id) => request(`/rules/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   runBacktest: (ruleId, start, end) => request('/backtests/range', {
     method: 'POST',
     body: JSON.stringify({ rule_id: ruleId, start, end }),
