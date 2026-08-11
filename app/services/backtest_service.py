@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session, selectinload
 from app.backtesting.engine import BacktestEngine
 from app.domain.rules import RuleDefinition
 from app.models.BacktestRun import BacktestRun
+from app.models.MarketBar import MarketBar
 from app.models.Rule import Rule
-from app.schemas.backtest import BacktestCreate, BacktestResponse
+from app.schemas.backtest import BacktestCreate, BacktestRangeCreate, BacktestResponse
+from app.domain.events import MarketEvent
 
 
 class RuleNotFoundError(Exception):
@@ -90,6 +92,45 @@ def execute_backtest(request: BacktestCreate, session: Session) -> BacktestRespo
     return _to_response(run)
 
 
+def execute_backtest_range(
+    request: BacktestRangeCreate,
+    session: Session,
+) -> BacktestResponse:
+    rule = session.get(Rule, request.rule_id)
+    if rule is None:
+        raise RuleNotFoundError(request.rule_id)
+    bars = session.execute(
+        select(MarketBar)
+        .where(
+            MarketBar.symbol == rule.symbol,
+            MarketBar.timeframe == rule.timeframe,
+            MarketBar.timestamp >= request.start,
+            MarketBar.timestamp <= request.end,
+        )
+        .order_by(MarketBar.timestamp)
+    ).scalars().all()
+    if not bars:
+        raise BacktestInputError("no market bars found for the requested range")
+    events = [
+        MarketEvent(
+            symbol=bar.symbol,
+            timeframe=bar.timeframe,
+            timestamp=_as_utc(bar.timestamp),
+            open=bar.open,
+            high=bar.high,
+            low=bar.low,
+            close=bar.close,
+            volume=bar.volume,
+            source=bar.source,
+        )
+        for bar in bars
+    ]
+    return execute_backtest(
+        BacktestCreate(rule_id=request.rule_id, events=events),
+        session,
+    )
+
+
 def get_backtest(run_id: str, session: Session) -> BacktestResponse | None:
     run = session.get(BacktestRun, run_id)
     return _to_response(run) if run else None
@@ -109,6 +150,10 @@ def _validate_events(definition: RuleDefinition, request: BacktestCreate) -> Non
 
 def _json_number(value: Decimal | None) -> str | None:
     return str(value) if value is not None else None
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
 def _to_response(run: BacktestRun) -> BacktestResponse:
