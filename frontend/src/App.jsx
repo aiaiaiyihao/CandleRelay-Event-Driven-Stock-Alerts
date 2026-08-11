@@ -69,21 +69,32 @@ function Condition({ item, index }) {
   )
 }
 
-const CHART_PERIODS = [['30m', '30 MIN'], ['60m', '60 MIN'], ['1d', 'DAILY'], ['1wk', 'WEEKLY'], ['1mo', 'MONTHLY']]
-const CHART_RANGE_BY_PERIOD = { '30m': '1mo', '60m': '1mo', '1d': '3mo', '1wk': '1y', '1mo': '1y' }
+const CHART_PERIODS = [['30m', '30 MIN'], ['60m', '60 MIN'], ['1d', '1D'], ['1wk', '1W'], ['1mo', '1M'], ['3mo', '3M'], ['1y', '1Y'], ['5y', '5Y'], ['max', 'MAX']]
+const CHART_PERIOD_INFO = {
+  '30m': '30 minutes · 5-minute points',
+  '60m': '60 minutes · 5-minute points',
+  '1d': '1 trading day · 5-minute points',
+  '1wk': '5 trading days · 30-minute points',
+  '1mo': 'about 22 trading days · hourly points',
+  '3mo': 'about 63 trading days · daily points',
+  '1y': 'about 252 trading days · weekly points',
+  '5y': 'about 1,260 trading days · monthly points',
+  max: 'full available history · monthly points',
+}
 
-function MarketChart({ symbol, displayName, interval, setInterval, data, message, averages, setAverages, compact = false }) {
+function MarketChart({ symbol, displayName, period, setPeriod, data, message, averages, setAverages, compact = false }) {
   return (
     <section className={`stock-chart-panel panel ${compact ? 'compact-chart' : ''}`} id={compact ? 'dashboard-chart' : 'stock-chart'}>
       <div className="chart-header">
-        <div className="chart-symbol"><span>SELECTED MARKET</span><h2>{displayName || symbol}</h2><p>{displayName && displayName !== symbol ? `${symbol} · ${message}` : message}</p></div>
+        <div className="chart-symbol"><span>SELECTED MARKET</span><h2>{displayName || symbol}</h2>{displayName && displayName !== symbol && <p>{symbol}</p>}</div>
         <div className="chart-controls">
-          <div className="interval-switcher" aria-label="Chart interval">
-            {CHART_PERIODS.map(([value, label]) => <button className={interval === value ? 'active' : ''} key={value} onClick={() => setInterval(value)}>{label}</button>)}
+          <div className="interval-switcher" aria-label="Chart period">
+            {CHART_PERIODS.map(([value, label]) => <button className={period === value ? 'active' : ''} key={value} onClick={() => setPeriod(value)}>{label}</button>)}
           </div>
           <div className="average-switcher" aria-label="Moving averages">
             {[['sma_20', 'SMA 20'], ['sma_50', 'SMA 50'], ['sma_200', 'SMA 200']].map(([key, label]) => <button className={averages[key] ? `active ${key}` : ''} key={key} onClick={() => setAverages((values) => ({ ...values, [key]: !values[key] }))}><i />{label}</button>)}
           </div>
+          <span className="period-info">{CHART_PERIOD_INFO[period]}</span>
         </div>
       </div>
       <div className="interactive-chart">
@@ -129,7 +140,7 @@ function App() {
   const [searchMessage, setSearchMessage] = useState('Enter an exact ticker symbol')
   const [suggestions, setSuggestions] = useState([])
   const [selectedSymbol, setSelectedSymbol] = useState('NVDA')
-  const [chartInterval, setChartInterval] = useState('1d')
+  const [chartPeriod, setChartPeriod] = useState('3mo')
   const [chartData, setChartData] = useState([])
   const [chartMessage, setChartMessage] = useState('Loading market history…')
   const [visibleAverages, setVisibleAverages] = useState({ sma_20: true, sma_50: true, sma_200: false })
@@ -168,16 +179,16 @@ function App() {
   useEffect(() => {
     let active = true
     setChartMessage(`Loading ${selectedSymbol} history…`)
-    api.chart(selectedSymbol, CHART_RANGE_BY_PERIOD[chartInterval], chartInterval)
+    api.chart(selectedSymbol, chartPeriod)
       .then((result) => {
         if (!active) return
         setChartData(result.points.map((point) => ({
           ...point,
-          date: chartInterval === '30m' || chartInterval === '60m'
+          date: ['5m', '30m', '60m'].includes(result.interval)
             ? new Date(point.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
             : new Date(point.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         })))
-        setChartMessage(`${result.points.length} ${result.interval} bars`)
+        setChartMessage('')
       })
       .catch((error) => {
         if (!active) return
@@ -185,7 +196,7 @@ function App() {
         setChartMessage(error.message)
       })
     return () => { active = false }
-  }, [selectedSymbol, chartInterval])
+  }, [selectedSymbol, chartPeriod])
 
   useEffect(() => {
     const query = search.trim()
@@ -424,7 +435,7 @@ function App() {
               {[['TOP GAINERS', market.gainers, 'up'], ['TOP LOSERS', market.losers, 'down']].map(([title, items, tone]) => <div className="mover-list" key={title}><h3>{title}<span>TOP 10</span></h3>{items.map((item, index) => <div className={`mover-row ${selectedSymbol === item.symbol ? 'selected' : ''}`} key={item.symbol} onClick={() => selectMarketSymbol(item.symbol)} role="button" tabIndex={0}><span>{String(index + 1).padStart(2, '0')}</span><strong>{item.symbol}</strong><em>${item.price.toFixed(2)}</em><b className={tone}>{item.change_percent >= 0 ? '+' : ''}{item.change_percent.toFixed(2)}%</b><button className={tracked.some((favorite) => favorite.symbol === item.symbol) ? 'star active' : 'star'} onClick={(event) => { event.stopPropagation(); tracked.some((favorite) => favorite.symbol === item.symbol) ? untrackSymbol(item.symbol) : trackSymbol(item.symbol) }} aria-label={`Toggle ${item.symbol} favorite`}>★</button></div>)}</div>)}
             </div>
           </div>
-          <MarketChart symbol={selectedSymbol} displayName={marketBySymbol[selectedSymbol]?.name} interval={chartInterval} setInterval={setChartInterval} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
+          <MarketChart symbol={selectedSymbol} displayName={marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
         </div>
       </section>}
 
@@ -500,12 +511,11 @@ function App() {
           <div className="chart-symbol">
             <span>SELECTED MARKET</span>
             <h2>{selectedSymbol}</h2>
-            <p>{chartMessage}</p>
           </div>
           <div className="chart-controls">
-            <div className="interval-switcher" aria-label="Chart interval">
+            <div className="interval-switcher" aria-label="Chart period">
               {CHART_PERIODS.map(([value, label]) => (
-                <button className={chartInterval === value ? 'active' : ''} key={value} onClick={() => setChartInterval(value)}>{label}</button>
+                <button className={chartPeriod === value ? 'active' : ''} key={value} onClick={() => setChartPeriod(value)}>{label}</button>
               ))}
             </div>
             <div className="average-switcher" aria-label="Moving averages">
@@ -513,6 +523,7 @@ function App() {
                 <button className={visibleAverages[key] ? `active ${key}` : ''} key={key} onClick={() => setVisibleAverages((values) => ({ ...values, [key]: !values[key] }))}><i />{label}</button>
               ))}
             </div>
+            <span className="period-info">{CHART_PERIOD_INFO[chartPeriod]}</span>
           </div>
         </div>
         <div className="interactive-chart">
