@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.api.auth_router import optional_current_user
 from app.core.config import get_db
+from app.models.User import User
 from app.schemas.rule import (
     RuleCompileRequest,
     RuleCreate,
@@ -37,8 +39,12 @@ def compile_rule(request: RuleCompileRequest):
 
 
 @router.post("", response_model=RuleResponse, status_code=status.HTTP_201_CREATED)
-def post_rule(request: RuleCreate, db: Session = Depends(get_db)):
-    return create_rule(request, db)
+def post_rule(
+    request: RuleCreate,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(optional_current_user),
+):
+    return create_rule(request, db, user_id=user.id if user else None)
 
 
 @router.get("", response_model=list[RuleResponse])

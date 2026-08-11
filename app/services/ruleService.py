@@ -5,9 +5,10 @@ from app.models.Rule import Rule, RuleVersion
 from app.schemas.rule import RuleCreate, RuleResponse, RuleUpdate, RuleVersionResponse
 
 
-def create_rule(request: RuleCreate, session: Session) -> RuleResponse:
+def create_rule(request: RuleCreate, session: Session, user_id: str | None = None) -> RuleResponse:
     definition = request.definition
     rule = Rule(
+        user_id=user_id,
         name=request.name,
         symbol=definition.symbol,
         timeframe=definition.timeframe,

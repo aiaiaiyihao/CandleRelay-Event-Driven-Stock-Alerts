@@ -24,6 +24,7 @@ class Rule(Base):
     __tablename__ = "rules"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid4()))
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     name = Column(String(120), nullable=False)
     symbol = Column(String(32), nullable=False, index=True)
     timeframe = Column(String(16), nullable=False)
