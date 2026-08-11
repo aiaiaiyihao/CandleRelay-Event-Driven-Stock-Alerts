@@ -10,6 +10,12 @@ APP_NAME = os.getenv("APP_NAME", "CandleRelay")
 APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
 APP_DEBUG = os.getenv("APP_DEBUG", "false").lower() in {"1", "true", "yes"}
 ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY", "")
+SMTP_HOST = os.getenv("SMTP_HOST", "")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", SMTP_USERNAME)
+SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() in {"1", "true", "yes"}
 CORS_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
