@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.Rule import Rule, RuleVersion
-from app.schemas.rule import RuleCreate, RuleResponse
+from app.schemas.rule import RuleCreate, RuleResponse, RuleUpdate, RuleVersionResponse
 
 
 def create_rule(request: RuleCreate, session: Session) -> RuleResponse:
@@ -40,6 +40,52 @@ def get_rule(rule_id: str, session: Session) -> RuleResponse | None:
     return _to_response(rule, _current_version(rule))
 
 
+def update_rule(
+    rule_id: str,
+    request: RuleUpdate,
+    session: Session,
+) -> RuleResponse | None:
+    rule = session.execute(
+        select(Rule)
+        .where(Rule.id == rule_id)
+        .options(selectinload(Rule.versions))
+    ).scalar_one_or_none()
+    if rule is None:
+        return None
+
+    next_version = max(version.version for version in rule.versions) + 1
+    definition = request.definition
+    rule.name = request.name or rule.name
+    rule.symbol = definition.symbol
+    rule.timeframe = definition.timeframe
+    rule.current_version = next_version
+    version = RuleVersion(
+        version=next_version,
+        dsl=definition.model_dump(mode="json"),
+    )
+    rule.versions.append(version)
+    session.commit()
+    session.refresh(rule)
+    return _to_response(rule, version)
+
+
+def list_rule_versions(
+    rule_id: str,
+    session: Session,
+) -> list[RuleVersionResponse] | None:
+    rule = session.execute(
+        select(Rule)
+        .where(Rule.id == rule_id)
+        .options(selectinload(Rule.versions))
+    ).scalar_one_or_none()
+    if rule is None:
+        return None
+    return [
+        RuleVersionResponse(version=version.version, definition=version.dsl)
+        for version in rule.versions
+    ]
+
+
 def _current_version(rule: Rule) -> RuleVersion:
     return next(
         version for version in rule.versions if version.version == rule.current_version
@@ -54,4 +100,3 @@ def _to_response(rule: Rule, version: RuleVersion) -> RuleResponse:
         version=version.version,
         definition=version.dsl,
     )
-

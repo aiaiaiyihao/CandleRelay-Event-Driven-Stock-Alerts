@@ -86,3 +86,31 @@ def test_returns_404_for_unknown_rule():
     response = client.get("/rules/missing")
 
     assert response.status_code == 404
+
+
+def test_update_creates_new_version_without_overwriting_history():
+    client = create_client()
+    created = client.post("/rules", json=rule_payload()).json()
+    updated_payload = rule_payload()
+    updated_payload["name"] = "Updated NVDA rule"
+    updated_payload["definition"]["conditions"]["all"][0]["right"]["period"] = 50
+
+    response = client.put(f"/rules/{created['id']}", json=updated_payload)
+
+    assert response.status_code == 200
+    updated = response.json()
+    assert updated["version"] == 2
+    assert updated["name"] == "Updated NVDA rule"
+    assert updated["definition"]["conditions"]["all"][0]["right"]["period"] == 50
+
+    versions = client.get(f"/rules/{created['id']}/versions").json()
+    assert [version["version"] for version in versions] == [1, 2]
+    assert versions[0]["definition"]["conditions"]["all"][0]["right"]["period"] == 20
+
+
+def test_update_returns_404_for_unknown_rule():
+    client = create_client()
+
+    response = client.put("/rules/missing", json=rule_payload())
+
+    assert response.status_code == 404

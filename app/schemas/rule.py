@@ -10,6 +10,13 @@ class RuleCreate(BaseModel):
     definition: RuleDefinition
 
 
+class RuleUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    definition: RuleDefinition
+
+
 class RuleResponse(BaseModel):
     id: str
     name: str
@@ -17,3 +24,7 @@ class RuleResponse(BaseModel):
     version: int
     definition: RuleDefinition
 
+
+class RuleVersionResponse(BaseModel):
+    version: int
+    definition: RuleDefinition
