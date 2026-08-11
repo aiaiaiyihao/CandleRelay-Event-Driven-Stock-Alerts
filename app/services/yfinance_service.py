@@ -1,4 +1,5 @@
 import yfinance as yf
+import pandas as pd
 from datetime import datetime
 import asyncio
 
@@ -12,15 +13,15 @@ CHART_INTERVALS = {
     "1mo": {"history_period": "max", "points": {"1mo": 1, "3mo": 3, "6mo": 6, "1y": 12}},
 }
 CHART_PRESETS = {
-    "30m": {"history_period": "5d", "interval": "5m", "points": 6},
-    "60m": {"history_period": "5d", "interval": "5m", "points": 12},
-    "1d": {"history_period": "5d", "interval": "5m", "points": 78},
-    "1wk": {"history_period": "60d", "interval": "30m", "points": 65},
-    "1mo": {"history_period": "60d", "interval": "60m", "points": 154},
-    "3mo": {"history_period": "2y", "interval": "1d", "points": 66},
-    "1y": {"history_period": "5y", "interval": "1wk", "points": 52},
-    "5y": {"history_period": "max", "interval": "1mo", "points": 60},
-    "max": {"history_period": "max", "interval": "1mo", "points": None},
+    "30m": {"history_period": "5d", "source_interval": "1m", "interval": "1m", "points": 30},
+    "60m": {"history_period": "5d", "source_interval": "1m", "interval": "1m", "points": 60},
+    "1d": {"history_period": "5d", "source_interval": "1m", "interval": "1m", "points": 390},
+    "1wk": {"history_period": "60d", "source_interval": "5m", "interval": "10m", "aggregate": "10min", "points": 195},
+    "1mo": {"history_period": "730d", "source_interval": "60m", "interval": "4h", "aggregate": "4h", "points": 44},
+    "3mo": {"history_period": "2y", "source_interval": "1d", "interval": "1d", "points": 66},
+    "1y": {"history_period": "5y", "source_interval": "1d", "interval": "2d", "aggregate_rows": 2, "points": 126},
+    "5y": {"history_period": "max", "source_interval": "1wk", "interval": "1wk", "points": 260},
+    "max": {"history_period": "max", "source_interval": "1mo", "interval": "1mo", "points": None},
 }
 MARKET_INDEXES = {
     "^GSPC": "S&P 500",
@@ -123,7 +124,7 @@ async def fetch_chart_preset_yfinance(symbol: str, period: str) -> dict:
     def load_history():
         return yf.Ticker(symbol).history(
             period=config["history_period"],
-            interval=config["interval"],
+            interval=config["source_interval"],
             auto_adjust=False,
         )
 
@@ -134,6 +135,11 @@ async def fetch_chart_preset_yfinance(symbol: str, period: str) -> dict:
     if history.empty:
         raise ValueError(f"No chart data found for symbol: {symbol}")
 
+    history = aggregate_chart_history(
+        history,
+        frequency=config.get("aggregate"),
+        rows=config.get("aggregate_rows"),
+    )
     points = build_chart_points(history)
     if config["points"] is not None:
         points = points[-config["points"]:]
@@ -143,6 +149,42 @@ async def fetch_chart_preset_yfinance(symbol: str, period: str) -> dict:
         "interval": config["interval"],
         "points": points,
     }
+
+
+def aggregate_chart_history(history, frequency: str | None = None, rows: int | None = None):
+    aggregations = {
+        "Open": "first",
+        "High": "max",
+        "Low": "min",
+        "Close": "last",
+        "Volume": "sum",
+    }
+    if frequency:
+        offset = "9h30min" if frequency in {"10min", "4h"} else None
+        return (
+            history.resample(frequency, origin="start_day", offset=offset)
+            .agg(aggregations)
+            .dropna(subset=["Close"])
+        )
+    if rows:
+        records = []
+        timestamps = []
+        for start in range(0, len(history), rows):
+            chunk = history.iloc[start:start + rows]
+            if chunk.empty:
+                continue
+            records.append(
+                {
+                    "Open": chunk["Open"].iloc[0],
+                    "High": chunk["High"].max(),
+                    "Low": chunk["Low"].min(),
+                    "Close": chunk["Close"].iloc[-1],
+                    "Volume": chunk["Volume"].sum(),
+                }
+            )
+            timestamps.append(chunk.index[-1])
+        return pd.DataFrame(records, index=pd.DatetimeIndex(timestamps))
+    return history
 
 
 def build_chart_points(history) -> list[dict]:

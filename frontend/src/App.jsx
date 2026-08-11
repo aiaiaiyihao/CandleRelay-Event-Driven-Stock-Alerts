@@ -71,14 +71,14 @@ function Condition({ item, index }) {
 
 const CHART_PERIODS = [['30m', '30 MIN'], ['60m', '60 MIN'], ['1d', '1D'], ['1wk', '1W'], ['1mo', '1M'], ['3mo', '3M'], ['1y', '1Y'], ['5y', '5Y'], ['max', 'MAX']]
 const CHART_PERIOD_INFO = {
-  '30m': '30 minutes · 5-minute points',
-  '60m': '60 minutes · 5-minute points',
-  '1d': '1 trading day · 5-minute points',
-  '1wk': '5 trading days · 30-minute points',
-  '1mo': 'about 22 trading days · hourly points',
+  '30m': '30 minutes · 1-minute points',
+  '60m': '60 minutes · 1-minute points',
+  '1d': '1 trading day · 1-minute points',
+  '1wk': '5 trading days · 10-minute points',
+  '1mo': 'about 22 trading days · 4-hour points',
   '3mo': 'about 63 trading days · daily points',
-  '1y': 'about 252 trading days · weekly points',
-  '5y': 'about 1,260 trading days · monthly points',
+  '1y': 'about 252 trading days · 2-day points',
+  '5y': 'about 1,260 trading days · weekly points',
   max: 'full available history · monthly points',
 }
 

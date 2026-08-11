@@ -231,14 +231,14 @@ coarser sampling for longer history:
 
 | UI label | API period | Display window | Sampling |
 | --- | --- | --- | --- |
-| 30 MIN | `30m` | 30 minutes | 5-minute points |
-| 60 MIN | `60m` | 60 minutes | 5-minute points |
-| 1D | `1d` | 1 trading day | 5-minute points |
-| 1W | `1wk` | 5 trading days | 30-minute points |
-| 1M | `1mo` | About 22 trading days | Hourly points |
+| 30 MIN | `30m` | 30 minutes | 1-minute points |
+| 60 MIN | `60m` | 60 minutes | 1-minute points |
+| 1D | `1d` | 1 trading day | 1-minute points |
+| 1W | `1wk` | 5 trading days | 10-minute points |
+| 1M | `1mo` | About 22 trading days | 4-hour points |
 | 3M | `3mo` | About 63 trading days | Daily points |
-| 1Y | `1y` | About 252 trading days | Weekly points |
-| 5Y | `5y` | About 1,260 trading days | Monthly points |
+| 1Y | `1y` | About 252 trading days | 2-day points |
+| 5Y | `5y` | About 1,260 trading days | Weekly points |
 | MAX | `max` | Full available history | Monthly points |
 
 SMA20, SMA50, and SMA200 are calculated with pre-window warmup data. This lets
