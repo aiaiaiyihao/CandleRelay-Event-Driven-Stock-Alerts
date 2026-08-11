@@ -101,6 +101,10 @@ function MarketChart({ symbol, range, setRange, data, message, averages, setAver
 }
 
 function App() {
+  const [page, setPage] = useState(() => {
+    const route = window.location.pathname.replace(/^\//, '')
+    return ['dashboard', 'favorites', 'rule-studio'].includes(route) ? route : 'dashboard'
+  })
   const [user, setUser] = useState(null)
   const [authOpen, setAuthOpen] = useState(false)
   const [authMode, setAuthMode] = useState('login')
@@ -133,6 +137,15 @@ function App() {
     api.me().then(setUser).catch(() => {})
     api.marketOverview().then(setMarket).catch(() => {})
     api.alerts().then(setAlerts).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const handleNavigation = () => {
+      const route = window.location.pathname.replace(/^\//, '')
+      setPage(['dashboard', 'favorites', 'rule-studio'].includes(route) ? route : 'dashboard')
+    }
+    window.addEventListener('popstate', handleNavigation)
+    return () => window.removeEventListener('popstate', handleNavigation)
   }, [])
 
   useEffect(() => {
@@ -194,6 +207,12 @@ function App() {
     if (favoriteSort === 'price_desc') return (rightMarket?.price || 0) - (leftMarket?.price || 0)
     return (rightMarket?.change_percent ?? -Infinity) - (leftMarket?.change_percent ?? -Infinity)
   }), [tracked, marketBySymbol, favoriteSort])
+
+  function navigate(nextPage) {
+    window.history.pushState({}, '', `/${nextPage}`)
+    setPage(nextPage)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   async function submitAuth(event) {
     event.preventDefault()
@@ -339,11 +358,13 @@ function App() {
   return (
     <main>
       <header className="topbar">
-        <a className="brand" href="#top" aria-label="SignalForge home">
+        <a className="brand" href="/dashboard" onClick={(event) => { event.preventDefault(); navigate('dashboard') }} aria-label="SignalForge home">
           <span className="brand-mark">SF</span>
           <span>SignalForge</span>
         </a>
-        <nav className="product-nav" aria-label="Product navigation"><a href="#dashboard">Dashboard</a><a href="#favorites">My Favorites</a><a href="#rule-studio">Rule Studio</a></nav>
+        <nav className="product-nav" aria-label="Product navigation">
+          {[['dashboard', 'Dashboard'], ['favorites', 'My Favorites'], ['rule-studio', 'Rule Studio']].map(([route, label]) => <a className={page === route ? 'active' : ''} href={`/${route}`} key={route} onClick={(event) => { event.preventDefault(); navigate(route) }}>{label}</a>)}
+        </nav>
         <div className="account-actions">
           {user ? (
             <><span>{user.identifier}</span><button onClick={logout}>Sign out</button></>
@@ -375,15 +396,15 @@ function App() {
         </div>
       )}
 
-      <section className="hero" id="top">
+      {page === 'rule-studio' && <section className="hero" id="top">
         <div>
           <p className="eyebrow">NATURAL LANGUAGE → EXECUTABLE MARKET LOGIC</p>
           <h1>Forge market noise<br />into <span>precise signals.</span></h1>
         </div>
         <p className="hero-copy">One validated rule engine for historical replay and live Kafka events. Explainable by design, deterministic in production.</p>
-      </section>
+      </section>}
 
-      <section className="dashboard-section" id="dashboard">
+      {page === 'dashboard' && <section className="dashboard-section page-surface" id="dashboard">
         <div className="section-intro"><div><p className="eyebrow">US MARKET COMMAND CENTER</p><h2>Market dashboard</h2></div><p>Major indexes and today's leading large-cap movers. Select any market to inspect its trend.</p></div>
         <div className="index-strip">
           {market.indexes.map((item) => <button key={item.symbol} className={selectedSymbol === item.symbol ? 'selected' : ''} onClick={() => selectMarketSymbol(item.symbol)}><span>{item.name}</span><strong>{item.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong><em className={item.change_percent >= 0 ? 'up' : 'down'}>{item.change_percent >= 0 ? '+' : ''}{item.change_percent.toFixed(2)}%</em></button>)}
@@ -396,8 +417,10 @@ function App() {
           </div>
           <MarketChart symbol={selectedSymbol} range={chartRange} setRange={setChartRange} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
         </div>
-      </section>
+      </section>}
 
+      {page === 'favorites' && <>
+      <section className="favorites-heading page-surface"><p className="eyebrow">PERSONAL MARKET WORKSPACE</p><h1>My Favorites</h1><p>Search, save, sort, and inspect the stocks that matter to you.</p></section>
       <section className="market-explorer panel" id="favorites">
         <div className="panel-heading">
           <div><span className="step">00</span><h2>Market explorer</h2></div>
@@ -506,7 +529,9 @@ function App() {
           ) : <div className="chart-empty">{chartMessage}</div>}
         </div>
       </section>
+      </>}
 
+      {page === 'rule-studio' && <>
       <section className="workspace" id="rule-studio">
         <article className="panel composer">
           <div className="panel-heading">
@@ -578,6 +603,7 @@ function App() {
           <div className="event-route"><span>KAFKA</span><b>→</b><span>ENGINE</span><b>→</b><span>ALERT</span></div>
         </aside>
       </section>
+      </>}
 
       <footer><span>SignalForge / Engine v1.0</span><span>Same rule. Live and replay.</span><span>FastAPI / Kafka / PostgreSQL</span></footer>
     </main>
