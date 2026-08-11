@@ -540,6 +540,12 @@ function App() {
   }
 
   async function activateRule() {
+    if (!user) {
+      setAuthMode('login')
+      setAuthOpen(true)
+      setMessage('Sign in before activating a personal alert')
+      return
+    }
     setBusy('activate')
     try {
       const rule = await api.createRule(`${definition.symbol} signal`, definition)
