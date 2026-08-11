@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from app.api.priceRouter import router as prices_router
 from app.api.ruleRouter import router as rules_router
 from app.api.backtest_router import router as backtests_router
+from app.api.alert_router import router as alerts_router
 import logging
 from app.core.config import redis
 from app.kafka.Producer import producer
@@ -46,3 +47,4 @@ logging.basicConfig(
 app.include_router(prices_router)
 app.include_router(rules_router)
 app.include_router(backtests_router)
+app.include_router(alerts_router)
