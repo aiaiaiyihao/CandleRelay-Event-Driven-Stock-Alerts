@@ -115,11 +115,15 @@ async def search_stocks_yfinance(query: str, limit: int = 6) -> list[dict]:
     ][:limit]
 
 
-async def fetch_stock_detail_yfinance(symbol: str, force_refresh: bool = False) -> dict:
+async def fetch_stock_detail_yfinance(
+    symbol: str,
+    force_refresh: bool = False,
+    refresh_closed_snapshot: bool = False,
+) -> dict:
     cache_key = f"candlerelay:stock-detail:{symbol.upper()}"
     closed_cache_key = f"candlerelay:stock-detail:closed:{symbol.upper()}"
     closed_snapshot = await get_cached_json(closed_cache_key)
-    if closed_snapshot is not None:
+    if closed_snapshot is not None and not refresh_closed_snapshot:
         return {**closed_snapshot, "news": await fetch_stock_news_yfinance(symbol)}
     if not force_refresh:
         cached = await get_cached_json(cache_key)
@@ -353,11 +357,14 @@ def moving_average(values: list[float], period: int) -> list[float | None]:
     return result
 
 
-async def fetch_market_overview(force_refresh: bool = False) -> dict:
+async def fetch_market_overview(
+    force_refresh: bool = False,
+    refresh_closed_snapshot: bool = False,
+) -> dict:
     global _market_overview_cache
     now = time.monotonic()
     closed_snapshot = await get_cached_json(MARKET_OVERVIEW_CLOSED_KEY)
-    if closed_snapshot is not None:
+    if closed_snapshot is not None and not refresh_closed_snapshot:
         _market_overview_cache = (now, closed_snapshot)
         return closed_snapshot
     if not force_refresh and _market_overview_cache and now - _market_overview_cache[0] < MARKET_OVERVIEW_CACHE_SECONDS:
