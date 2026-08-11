@@ -29,10 +29,12 @@ export const api = {
   alerts: () => request('/alerts?acknowledged=false'),
   acknowledge: (id) => request(`/alerts/${id}/acknowledge`, { method: 'POST' }),
   quote: (symbol) => request(`/prices/latest?symbol=${encodeURIComponent(symbol)}`),
+  searchStocks: (query) => request(`/stocks/search?q=${encodeURIComponent(query)}`),
   watchlist: () => request('/watchlist'),
   track: (symbol) => request('/watchlist', {
     method: 'POST',
     body: JSON.stringify({ symbol }),
   }),
   untrack: (symbol) => request(`/watchlist/${encodeURIComponent(symbol)}`, { method: 'DELETE' }),
+  chart: (symbol, range) => request(`/stocks/${encodeURIComponent(symbol)}/chart?range=${encodeURIComponent(range)}`),
 }
