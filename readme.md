@@ -246,15 +246,3 @@ examples/            Importable NVDA demonstration data
 docker/              API image and complete Compose stack
 tests/               Unit, API, replay-parity, and end-to-end demo tests
 ```
-
-## Resume talking points
-
-- Designed one deterministic rule engine shared by Kafka live processing and
-  historical replay, preventing semantic drift between alerts and backtests.
-- Compiled natural-language market conditions into a versioned Pydantic DSL
-  with strict validation and explainable per-condition results.
-- Built incremental technical indicators and durable alert deduplication and
-  cooldown handling using PostgreSQL, Redis-ready configuration, and Kafka
-  manual offset commits.
-- Delivered a Dockerized FastAPI and React application with Alembic migrations,
-  reproducible demo data, and comprehensive automated tests.
