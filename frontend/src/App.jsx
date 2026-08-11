@@ -69,6 +69,37 @@ function Condition({ item, index }) {
   )
 }
 
+function MarketChart({ symbol, range, setRange, data, message, averages, setAverages, compact = false }) {
+  return (
+    <section className={`stock-chart-panel panel ${compact ? 'compact-chart' : ''}`} id={compact ? 'dashboard-chart' : 'stock-chart'}>
+      <div className="chart-header">
+        <div className="chart-symbol"><span>SELECTED MARKET</span><h2>{symbol}</h2><p>{message}</p></div>
+        <div className="chart-controls">
+          <div className="range-switcher" aria-label="Chart range">
+            {[['1mo', '1M'], ['3mo', '3M'], ['6mo', '6M'], ['1y', '1Y']].map(([value, label]) => <button className={range === value ? 'active' : ''} key={value} onClick={() => setRange(value)}>{label}</button>)}
+          </div>
+          <div className="average-switcher" aria-label="Moving averages">
+            {[['sma_20', 'SMA 20'], ['sma_50', 'SMA 50'], ['sma_200', 'SMA 200']].map(([key, label]) => <button className={averages[key] ? `active ${key}` : ''} key={key} onClick={() => setAverages((values) => ({ ...values, [key]: !values[key] }))}><i />{label}</button>)}
+          </div>
+        </div>
+      </div>
+      <div className="interactive-chart">
+        {data.length ? <ResponsiveContainer width="100%" height="100%"><ComposedChart data={data} margin={{ top: 16, right: 14, bottom: 4, left: 0 }}>
+          <defs><linearGradient id={compact ? 'dashboardPriceFill' : 'favoritePriceFill'} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e76d2d" stopOpacity={0.28} /><stop offset="100%" stopColor="#e76d2d" stopOpacity={0} /></linearGradient></defs>
+          <CartesianGrid stroke="#252728" vertical={false} />
+          <XAxis dataKey="date" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} minTickGap={34} />
+          <YAxis domain={['auto', 'auto']} orientation="right" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} width={52} tickFormatter={(value) => `$${Number(value).toFixed(0)}`} />
+          <Tooltip content={({ active, payload, label }) => active && payload?.length ? <div className="chart-tooltip"><span>{label}</span>{payload.map((item) => <div key={item.dataKey}><i style={{ background: item.color }} />{item.name}<strong>${Number(item.value).toFixed(2)}</strong></div>)}</div> : null} />
+          <Area type="monotone" dataKey="close" name="Price" stroke="#e9e7e1" strokeWidth={2} fill={`url(#${compact ? 'dashboardPriceFill' : 'favoritePriceFill'})`} dot={false} />
+          {averages.sma_20 && <Line type="monotone" dataKey="sma_20" name="SMA 20" stroke="#e76d2d" strokeWidth={1.5} dot={false} />}
+          {averages.sma_50 && <Line type="monotone" dataKey="sma_50" name="SMA 50" stroke="#5fd398" strokeWidth={1.4} dot={false} />}
+          {averages.sma_200 && <Line type="monotone" dataKey="sma_200" name="SMA 200" stroke="#8887d8" strokeWidth={1.4} dot={false} />}
+        </ComposedChart></ResponsiveContainer> : <div className="chart-empty">{message}</div>}
+      </div>
+    </section>
+  )
+}
+
 function App() {
   const [user, setUser] = useState(null)
   const [authOpen, setAuthOpen] = useState(false)
@@ -83,6 +114,9 @@ function App() {
   const [backtest, setBacktest] = useState(SAMPLE_BACKTEST)
   const [alerts, setAlerts] = useState([])
   const [tracked, setTracked] = useState([])
+  const [market, setMarket] = useState({ indexes: [], gainers: [], losers: [] })
+  const [favoriteQuotes, setFavoriteQuotes] = useState([])
+  const [favoriteSort, setFavoriteSort] = useState('change_desc')
   const [search, setSearch] = useState('NVDA')
   const [quote, setQuote] = useState(null)
   const [searchMessage, setSearchMessage] = useState('Enter an exact ticker symbol')
@@ -97,9 +131,19 @@ function App() {
 
   useEffect(() => {
     api.me().then(setUser).catch(() => {})
+    api.marketOverview().then(setMarket).catch(() => {})
     api.alerts().then(setAlerts).catch(() => {})
-    api.watchlist().then(setTracked).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (user) api.favorites().then(setTracked).catch(() => setTracked([]))
+    else setTracked([])
+  }, [user])
+
+  useEffect(() => {
+    if (tracked.length) api.marketQuotes(tracked.map((item) => item.symbol)).then(setFavoriteQuotes).catch(() => setFavoriteQuotes([]))
+    else setFavoriteQuotes([])
+  }, [tracked])
 
   useEffect(() => {
     let active = true
@@ -140,6 +184,16 @@ function App() {
   }, [search])
 
   const returns = useMemo(() => backtest?.result_summary?.average_forward_returns || {}, [backtest])
+  const marketBySymbol = useMemo(() => Object.fromEntries(
+    [...market.indexes, ...market.gainers, ...market.losers, ...favoriteQuotes].map((item) => [item.symbol, item]),
+  ), [market, favoriteQuotes])
+  const sortedFavorites = useMemo(() => [...tracked].sort((left, right) => {
+    const leftMarket = marketBySymbol[left.symbol]
+    const rightMarket = marketBySymbol[right.symbol]
+    if (favoriteSort === 'symbol') return left.symbol.localeCompare(right.symbol)
+    if (favoriteSort === 'price_desc') return (rightMarket?.price || 0) - (leftMarket?.price || 0)
+    return (rightMarket?.change_percent ?? -Infinity) - (leftMarket?.change_percent ?? -Infinity)
+  }), [tracked, marketBySymbol, favoriteSort])
 
   async function submitAuth(event) {
     event.preventDefault()
@@ -240,12 +294,17 @@ function App() {
   }
 
   async function trackSymbol(symbol) {
+    if (!user) {
+      setAuthMode('login')
+      setAuthOpen(true)
+      return
+    }
     setBusy(`track-${symbol}`)
     try {
-      const item = await api.track(symbol)
+      const item = await api.addFavorite(symbol)
       setTracked((items) => items.some((entry) => entry.symbol === item.symbol) ? items : [...items, item])
       setSelectedSymbol(item.symbol)
-      setSearchMessage(`${item.symbol} added to tracked symbols`)
+      setSearchMessage(`${item.symbol} added to My Favorites`)
     } catch (error) {
       setSearchMessage(error.message)
     } finally {
@@ -259,12 +318,17 @@ function App() {
     document.getElementById('stock-chart')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  function selectMarketSymbol(symbol) {
+    setSelectedSymbol(symbol)
+    setSearch(symbol)
+  }
+
   async function untrackSymbol(symbol) {
     setBusy(`track-${symbol}`)
     try {
-      await api.untrack(symbol)
+      await api.removeFavorite(symbol)
       setTracked((items) => items.filter((item) => item.symbol !== symbol))
-      setSearchMessage(`${symbol} removed from tracked symbols`)
+      setSearchMessage(`${symbol} removed from My Favorites`)
     } catch (error) {
       setSearchMessage(error.message)
     } finally {
@@ -279,7 +343,7 @@ function App() {
           <span className="brand-mark">SF</span>
           <span>SignalForge</span>
         </a>
-        <div className="system-state"><i /> EVENT STREAM ACTIVE</div>
+        <nav className="product-nav" aria-label="Product navigation"><a href="#dashboard">Dashboard</a><a href="#favorites">My Favorites</a><a href="#rule-studio">Rule Studio</a></nav>
         <div className="account-actions">
           {user ? (
             <><span>{user.identifier}</span><button onClick={logout}>Sign out</button></>
@@ -319,10 +383,25 @@ function App() {
         <p className="hero-copy">One validated rule engine for historical replay and live Kafka events. Explainable by design, deterministic in production.</p>
       </section>
 
-      <section className="market-explorer panel">
+      <section className="dashboard-section" id="dashboard">
+        <div className="section-intro"><div><p className="eyebrow">US MARKET COMMAND CENTER</p><h2>Market dashboard</h2></div><p>Major indexes and today's leading large-cap movers. Select any market to inspect its trend.</p></div>
+        <div className="index-strip">
+          {market.indexes.map((item) => <button key={item.symbol} className={selectedSymbol === item.symbol ? 'selected' : ''} onClick={() => selectMarketSymbol(item.symbol)}><span>{item.name}</span><strong>{item.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong><em className={item.change_percent >= 0 ? 'up' : 'down'}>{item.change_percent >= 0 ? '+' : ''}{item.change_percent.toFixed(2)}%</em></button>)}
+        </div>
+        <div className="dashboard-grid">
+          <div className="mover-panel panel">
+            <div className="mover-columns">
+              {[['TOP GAINERS', market.gainers, 'up'], ['TOP LOSERS', market.losers, 'down']].map(([title, items, tone]) => <div className="mover-list" key={title}><h3>{title}<span>TOP 10</span></h3>{items.map((item, index) => <div className={`mover-row ${selectedSymbol === item.symbol ? 'selected' : ''}`} key={item.symbol} onClick={() => selectMarketSymbol(item.symbol)} role="button" tabIndex={0}><span>{String(index + 1).padStart(2, '0')}</span><strong>{item.symbol}</strong><em>${item.price.toFixed(2)}</em><b className={tone}>{item.change_percent >= 0 ? '+' : ''}{item.change_percent.toFixed(2)}%</b><button className={tracked.some((favorite) => favorite.symbol === item.symbol) ? 'star active' : 'star'} onClick={(event) => { event.stopPropagation(); tracked.some((favorite) => favorite.symbol === item.symbol) ? untrackSymbol(item.symbol) : trackSymbol(item.symbol) }} aria-label={`Toggle ${item.symbol} favorite`}>★</button></div>)}</div>)}
+            </div>
+          </div>
+          <MarketChart symbol={selectedSymbol} range={chartRange} setRange={setChartRange} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
+        </div>
+      </section>
+
+      <section className="market-explorer panel" id="favorites">
         <div className="panel-heading">
           <div><span className="step">00</span><h2>Market explorer</h2></div>
-          <span className="tag">SEARCH / TRACK / MONITOR</span>
+          <span className="tag">PRIVATE / SORTABLE / PERSISTENT</span>
         </div>
         <div className="market-grid">
           <div className="stock-search">
@@ -354,26 +433,27 @@ function App() {
                 <strong>${Number(quote.price).toFixed(2)}</strong>
                 <time>{new Date(quote.timestamp).toLocaleString()}</time>
                 {tracked.some((item) => item.symbol === quote.symbol)
-                  ? <button className="tracked-button" onClick={() => untrackSymbol(quote.symbol)}>✓ Tracked</button>
-                  : <button className="track-button" onClick={() => trackSymbol(quote.symbol)}>+ Track stock</button>}
+                  ? <button className="tracked-button" onClick={() => untrackSymbol(quote.symbol)}>★ Favorite</button>
+                  : <button className="track-button" onClick={() => trackSymbol(quote.symbol)}>☆ Add favorite</button>}
               </div>
             )}
           </div>
           <div className="watchlist">
             <div className="watchlist-title">
-              <div><p className="section-label">TRACKED SYMBOLS</p><h3>Your market watchlist</h3></div>
+              <div><p className="section-label">MY FAVORITES</p><h3>{user ? 'Your private watchlist' : 'Sign in to save stocks'}</h3></div>
               <span>{tracked.length}</span>
             </div>
+            <div className="favorite-sort"><span>SORT BY</span><select value={favoriteSort} onChange={(event) => setFavoriteSort(event.target.value)}><option value="change_desc">Daily change</option><option value="price_desc">Price</option><option value="symbol">Symbol</option></select></div>
             {tracked.length === 0 ? (
-              <div className="watchlist-empty"><b>NO SYMBOLS TRACKED</b><p>Search for a ticker and add it to your watchlist.</p></div>
+              <div className="watchlist-empty"><b>NO FAVORITES YET</b><p>{user ? 'Search for a ticker or use a star on the dashboard.' : 'Sign in to create your personal favorites list.'}</p></div>
             ) : (
               <div className="tracked-list">
-                {tracked.map((item) => (
+                {sortedFavorites.map((item) => (
                   <div className={`tracked-row ${selectedSymbol === item.symbol ? 'selected' : ''}`} key={item.symbol} onClick={() => selectTrackedSymbol(item.symbol)} role="button" tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && selectTrackedSymbol(item.symbol)}>
-                    <span className="tracking-dot" />
+                    <span className="favorite-star">★</span>
                     <strong>{item.symbol}</strong>
-                    <span>Rules ready</span>
-                    <time>{new Date(item.created_at).toLocaleDateString()}</time>
+                    <span>{marketBySymbol[item.symbol] ? `$${marketBySymbol[item.symbol].price.toFixed(2)}` : 'Quote on select'}</span>
+                    <time className={(marketBySymbol[item.symbol]?.change_percent || 0) >= 0 ? 'up' : 'down'}>{marketBySymbol[item.symbol] ? `${marketBySymbol[item.symbol].change_percent >= 0 ? '+' : ''}${marketBySymbol[item.symbol].change_percent.toFixed(2)}%` : '—'}</time>
                     <button aria-label={`Remove ${item.symbol}`} onClick={() => untrackSymbol(item.symbol)} disabled={busy === `track-${item.symbol}`}>×</button>
                   </div>
                 ))}
@@ -427,7 +507,7 @@ function App() {
         </div>
       </section>
 
-      <section className="workspace">
+      <section className="workspace" id="rule-studio">
         <article className="panel composer">
           <div className="panel-heading">
             <div><span className="step">01</span><h2>Describe your signal</h2></div>

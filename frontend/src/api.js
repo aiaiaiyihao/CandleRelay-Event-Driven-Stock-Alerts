@@ -25,6 +25,14 @@ export const api = {
     body: JSON.stringify({ identifier, password }),
   }),
   logout: () => request('/auth/logout', { method: 'POST' }),
+  marketOverview: () => request('/market/overview'),
+  marketQuotes: (symbols) => request(`/market/quotes?symbols=${encodeURIComponent(symbols.join(','))}`),
+  favorites: () => request('/favorites'),
+  addFavorite: (symbol) => request('/favorites', {
+    method: 'POST',
+    body: JSON.stringify({ symbol }),
+  }),
+  removeFavorite: (symbol) => request(`/favorites/${encodeURIComponent(symbol)}`, { method: 'DELETE' }),
   compile: (text) => request('/rules/compile', {
     method: 'POST',
     body: JSON.stringify({ text, cooldown_seconds: 3600 }),
@@ -41,11 +49,5 @@ export const api = {
   acknowledge: (id) => request(`/alerts/${id}/acknowledge`, { method: 'POST' }),
   quote: (symbol) => request(`/prices/latest?symbol=${encodeURIComponent(symbol)}`),
   searchStocks: (query) => request(`/stocks/search?q=${encodeURIComponent(query)}`),
-  watchlist: () => request('/watchlist'),
-  track: (symbol) => request('/watchlist', {
-    method: 'POST',
-    body: JSON.stringify({ symbol }),
-  }),
-  untrack: (symbol) => request(`/watchlist/${encodeURIComponent(symbol)}`, { method: 'DELETE' }),
   chart: (symbol, range) => request(`/stocks/${encodeURIComponent(symbol)}/chart?range=${encodeURIComponent(range)}`),
 }

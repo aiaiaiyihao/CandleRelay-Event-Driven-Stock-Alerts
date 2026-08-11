@@ -133,6 +133,20 @@ def moving_average(values: list[float], period: int) -> list[float | None]:
 async def fetch_market_overview() -> dict:
     symbols = [*MARKET_INDEXES, *LARGE_CAP_UNIVERSE]
 
+    snapshots = await fetch_market_snapshots(symbols)
+    indexes = [item for item in snapshots if item["symbol"] in MARKET_INDEXES]
+    stocks = [item for item in snapshots if item["symbol"] not in MARKET_INDEXES]
+    return {
+        "indexes": indexes,
+        "gainers": sorted(stocks, key=lambda item: item["change_percent"], reverse=True)[:10],
+        "losers": sorted(stocks, key=lambda item: item["change_percent"])[:10],
+    }
+
+
+async def fetch_market_snapshots(symbols: list[str]) -> list[dict]:
+    if not symbols:
+        return []
+
     def load_market_data():
         return yf.download(
             tickers=symbols,
@@ -170,10 +184,4 @@ async def fetch_market_overview() -> dict:
         except (KeyError, TypeError, ValueError):
             continue
 
-    indexes = [item for item in snapshots if item["symbol"] in MARKET_INDEXES]
-    stocks = [item for item in snapshots if item["symbol"] not in MARKET_INDEXES]
-    return {
-        "indexes": indexes,
-        "gainers": sorted(stocks, key=lambda item: item["change_percent"], reverse=True)[:10],
-        "losers": sorted(stocks, key=lambda item: item["change_percent"])[:10],
-    }
+    return snapshots

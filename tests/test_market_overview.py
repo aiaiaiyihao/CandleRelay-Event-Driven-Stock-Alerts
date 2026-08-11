@@ -21,3 +21,15 @@ def test_market_overview_returns_indexes_and_rankings():
     assert response.json()["indexes"][0]["symbol"] == "^GSPC"
     assert response.json()["gainers"][0]["change_percent"] == 2.7
     assert response.json()["losers"][0]["change_percent"] == -1.35
+
+
+def test_market_quotes_returns_requested_favorite_snapshots():
+    quotes = [{"symbol": "AAPL", "name": "AAPL", "price": 220, "change": 2, "change_percent": 0.92, "sparkline": [218, 220]}]
+    app = FastAPI()
+    app.include_router(router)
+    with patch("app.api.market_router.fetch_market_snapshots", new=AsyncMock(return_value=quotes)) as fetch:
+        response = TestClient(app).get("/market/quotes", params={"symbols": "aapl,AAPL"})
+
+    assert response.status_code == 200
+    assert response.json() == quotes
+    fetch.assert_awaited_once_with(["AAPL"])
