@@ -35,15 +35,6 @@ const SAMPLE_DEFINITION = {
   cooldown_seconds: 3600,
 }
 
-const SAMPLE_BACKTEST = {
-  bars_processed: 22,
-  trigger_count: 1,
-  result_summary: {
-    triggers: [{ evaluated_at: '2026-07-22T20:00:00+00:00', entry_price: '120.00000000' }],
-    average_forward_returns: { 1: '0.047', 5: '0.118', 20: '0.214' },
-  },
-}
-
 function Metric({ label, value, tone }) {
   return (
     <div className="metric">
@@ -245,7 +236,9 @@ function App() {
   const [definition, setDefinition] = useState(SAMPLE_DEFINITION)
   const [warning, setWarning] = useState('No timeframe specified - defaulted to daily bars')
   const [ruleId, setRuleId] = useState('')
-  const [backtest, setBacktest] = useState(SAMPLE_BACKTEST)
+  const [backtest, setBacktest] = useState(null)
+  const [backtestStart, setBacktestStart] = useState('2026-07-01')
+  const [backtestEnd, setBacktestEnd] = useState('2026-08-11')
   const [alerts, setAlerts] = useState([])
   const [rules, setRules] = useState([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
@@ -418,6 +411,7 @@ function App() {
   }, [search, suggestionsOpen])
 
   const returns = useMemo(() => backtest?.result_summary?.average_forward_returns || {}, [backtest])
+  const selectedRule = useMemo(() => rules.find((rule) => rule.id === ruleId) || null, [rules, ruleId])
   const marketBySymbol = useMemo(() => (
     [...market.indexes, ...market.gainers, ...market.losers, ...favoriteQuotes].reduce((items, item) => {
       const previous = items[item.symbol]
@@ -453,6 +447,10 @@ function App() {
   useEffect(() => {
     setFavoriteNewsPage((current) => Math.min(current, favoriteNewsPageCount - 1))
   }, [favoriteNewsPageCount])
+
+  useEffect(() => {
+    if (!ruleId && rules.length) setRuleId(rules[0].id)
+  }, [rules, ruleId])
 
   async function refreshMarket() {
     setBusy('market-refresh')
@@ -568,8 +566,9 @@ function App() {
       return
     }
     setBusy('backtest')
+    setBacktest(null)
     try {
-      const result = await api.runBacktest(ruleId, '2026-07-01T00:00:00Z', '2026-07-23T00:00:00Z')
+      const result = await api.runBacktest(ruleId, `${backtestStart}T00:00:00Z`, `${backtestEnd}T23:59:59Z`)
       setBacktest(result)
       setMessage(`Backtest completed - ${result.trigger_count} signal found`)
     } catch (error) {
@@ -884,20 +883,13 @@ function App() {
             <div><span className="step">04</span><h2>Historical replay</h2></div>
             <button className="run" onClick={runBacktest} disabled={Boolean(busy)}>{busy === 'backtest' ? 'Running…' : 'Run backtest ↗'}</button>
           </div>
+          <div className="replay-config"><label>RULE<select value={ruleId} onChange={(event) => { setRuleId(event.target.value); setBacktest(null) }} disabled={!rules.length}>{rules.length ? rules.map((rule) => <option key={rule.id} value={rule.id}>{rule.name} · {rule.definition.symbol}</option>) : <option value="">No active rule</option>}</select></label><label>FROM<input type="date" value={backtestStart} onChange={(event) => setBacktestStart(event.target.value)} /></label><label>TO<input type="date" value={backtestEnd} onChange={(event) => setBacktestEnd(event.target.value)} /></label><p>{selectedRule ? `Replaying stored ${selectedRule.definition.timeframe.toUpperCase()} bars for ${selectedRule.definition.symbol} through rule v${selectedRule.version}.` : 'Select or activate a rule to replay stored market bars.'}</p></div>
           <div className="metrics-row">
-            <Metric label="BARS PROCESSED" value={backtest.bars_processed} />
-            <Metric label="SIGNALS FOUND" value={backtest.trigger_count} tone="orange" />
+            <Metric label="BARS PROCESSED" value={backtest?.bars_processed ?? '—'} />
+            <Metric label="SIGNALS FOUND" value={backtest?.trigger_count ?? '—'} tone="orange" />
             <Metric label="20-BAR RETURN" value={returns['20'] ? `+${(Number(returns['20']) * 100).toFixed(1)}%` : '—'} tone="green" />
           </div>
-          <div className="chart" aria-label="Sample NVDA price chart">
-            <div className="grid-line one" /><div className="grid-line two" /><div className="grid-line three" />
-            <svg viewBox="0 0 800 180" preserveAspectRatio="none" role="img" aria-label="Price line dropping through moving average">
-              <polyline className="sma-line" points="0,126 80,120 160,112 240,104 320,96 400,88 480,80 560,72 640,66 720,61 800,56" />
-              <polyline className="price-line" points="0,142 80,126 160,132 240,104 320,112 400,79 480,91 560,53 640,65 700,42 750,48 800,146" />
-              <circle cx="800" cy="146" r="7" />
-            </svg>
-            <span className="signal-label">SIGNAL - JUL 22</span>
-          </div>
+          <div className="replay-events">{backtest ? (backtest.result_summary?.triggers?.length ? backtest.result_summary.triggers.map((trigger, index) => <article key={`${trigger.evaluated_at}-${index}`}><span>{String(index + 1).padStart(2, '0')}</span><strong>{new Date(trigger.evaluated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</strong><em>ENTRY ${Number(trigger.entry_price).toFixed(2)}</em><b>{trigger.forward_returns?.['20'] ? `${Number(trigger.forward_returns['20']) >= 0 ? '+' : ''}${(Number(trigger.forward_returns['20']) * 100).toFixed(2)}% / 20 BARS` : 'FORWARD RETURN UNAVAILABLE'}</b></article>) : <div>REPLAY COMPLETED · NO TRIGGERS IN THIS RANGE</div>) : <div>RUN A BACKTEST TO SEE REAL TRIGGER EVENTS</div>}</div>
         </article>
 
         <aside className="panel alert-card">
