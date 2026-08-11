@@ -94,6 +94,43 @@ async def search_stocks_yfinance(query: str, limit: int = 6) -> list[dict]:
     ][:limit]
 
 
+async def fetch_stock_detail_yfinance(symbol: str) -> dict:
+    def load_detail():
+        return yf.Ticker(symbol).info
+
+    try:
+        info = await asyncio.to_thread(load_detail)
+    except Exception as exc:
+        raise ValueError(f"yfinance detail error for symbol '{symbol}': {exc}") from exc
+    price = info.get("regularMarketPrice") or info.get("currentPrice")
+    if price is None:
+        raise ValueError(f"Stock not found for symbol: {symbol}")
+    previous = info.get("regularMarketPreviousClose") or info.get("previousClose")
+    change = float(price) - float(previous) if previous else None
+    timestamp = info.get("regularMarketTime")
+    return {
+        "symbol": symbol.upper(),
+        "name": info.get("longName") or info.get("shortName") or symbol.upper(),
+        "exchange": info.get("fullExchangeName") or info.get("exchange"),
+        "currency": info.get("currency"),
+        "sector": info.get("sector"),
+        "industry": info.get("industry"),
+        "price": float(price),
+        "previous_close": float(previous) if previous else None,
+        "change": change,
+        "change_percent": (change / float(previous)) * 100 if previous else None,
+        "open": info.get("regularMarketOpen") or info.get("open"),
+        "day_high": info.get("regularMarketDayHigh") or info.get("dayHigh"),
+        "day_low": info.get("regularMarketDayLow") or info.get("dayLow"),
+        "volume": info.get("regularMarketVolume") or info.get("volume"),
+        "market_cap": info.get("marketCap"),
+        "fifty_two_week_high": info.get("fiftyTwoWeekHigh"),
+        "fifty_two_week_low": info.get("fiftyTwoWeekLow"),
+        "market_state": info.get("marketState"),
+        "updated_at": datetime.fromtimestamp(timestamp, tz=timezone.utc) if timestamp else datetime.now(timezone.utc),
+    }
+
+
 async def fetch_chart_yfinance(symbol: str, chart_range: str, chart_interval: str = "1d") -> dict:
     if chart_range not in CHART_RANGES:
         raise ValueError(f"Unsupported chart range: {chart_range}")

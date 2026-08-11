@@ -161,6 +161,7 @@ function App() {
   const [page, setPage] = useState(() => {
     const route = window.location.pathname.replace(/^\//, '')
     if (route.startsWith('sectors/')) return 'sector'
+    if (route.startsWith('stocks/')) return 'stock'
     return ['dashboard', 'favorites', 'rule-studio'].includes(route) ? route : 'dashboard'
   })
   const [sectorSlug, setSectorSlug] = useState(() => window.location.pathname.startsWith('/sectors/') ? window.location.pathname.split('/')[2] : '')
@@ -181,13 +182,14 @@ function App() {
   const [moverPages, setMoverPages] = useState({ gainers: 0, losers: 0 })
   const [sectorStocks, setSectorStocks] = useState({ sector: '', page: 1, page_size: 10, total: 0, stocks: [], updated_at: null })
   const [sectorPage, setSectorPage] = useState(1)
+  const [stockDetail, setStockDetail] = useState(null)
   const [favoriteQuotes, setFavoriteQuotes] = useState([])
   const [favoriteSort, setFavoriteSort] = useState('change_desc')
   const [search, setSearch] = useState('NVDA')
   const [quote, setQuote] = useState(null)
   const [searchMessage, setSearchMessage] = useState('Enter an exact ticker symbol')
   const [suggestions, setSuggestions] = useState([])
-  const [selectedSymbol, setSelectedSymbol] = useState('NVDA')
+  const [selectedSymbol, setSelectedSymbol] = useState(() => window.location.pathname.startsWith('/stocks/') ? window.location.pathname.split('/')[2].toUpperCase() : 'NVDA')
   const [chartPeriod, setChartPeriod] = useState('3mo')
   const [chartData, setChartData] = useState([])
   const [chartMessage, setChartMessage] = useState('Loading market history…')
@@ -211,6 +213,9 @@ function App() {
       if (route.startsWith('sectors/')) {
         setSectorSlug(route.split('/')[1])
         setPage('sector')
+      } else if (route.startsWith('stocks/')) {
+        setSelectedSymbol(route.split('/')[1].toUpperCase())
+        setPage('stock')
       } else {
         setPage(['dashboard', 'favorites', 'rule-studio'].includes(route) ? route : 'dashboard')
       }
@@ -227,6 +232,16 @@ function App() {
       .catch(() => setSectorStocks({ sector: sectorSlug, page: sectorPage, page_size: 10, total: 0, stocks: [], updated_at: null }))
       .finally(() => setBusy(''))
   }, [page, sectorSlug, sectorPage])
+
+  useEffect(() => {
+    if (page !== 'stock' || !selectedSymbol) return
+    setBusy('stock-detail')
+    setStockDetail(null)
+    api.stockDetail(selectedSymbol)
+      .then(setStockDetail)
+      .catch(() => setStockDetail(null))
+      .finally(() => setBusy(''))
+  }, [page, selectedSymbol])
 
   useEffect(() => {
     if (user) api.favorites().then(setTracked).catch(() => setTracked([]))
@@ -311,6 +326,20 @@ function App() {
     setSectorPage(1)
     setPage('sector')
     window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function navigateStock(symbol) {
+    const normalized = symbol.toUpperCase()
+    window.history.pushState({}, '', `/stocks/${normalized}`)
+    setSelectedSymbol(normalized)
+    setSearch(normalized)
+    setPage('stock')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function createAlertForStock(symbol) {
+    setText(`Alert me when ${symbol} crosses below SMA20 and volume is more than 2 times the average of the past 20 trading days.`)
+    navigate('rule-studio')
   }
 
   async function submitAuth(event) {
@@ -431,9 +460,7 @@ function App() {
   }
 
   function selectTrackedSymbol(symbol) {
-    setSelectedSymbol(symbol)
-    setSearch(symbol)
-    document.getElementById('stock-chart')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    navigateStock(symbol)
   }
 
   function selectMarketSymbol(symbol) {
@@ -511,8 +538,8 @@ function App() {
         <div className="dashboard-grid">
           <div className="mover-panel panel">
             <div className="mover-columns">
-              <MoverList title="TOP GAINERS" items={market.gainers} tone="up" page={moverPages.gainers} setPage={(nextPage) => setMoverPages((pages) => ({ ...pages, gainers: nextPage }))} selectedSymbol={selectedSymbol} selectSymbol={selectMarketSymbol} tracked={tracked} trackSymbol={trackSymbol} untrackSymbol={untrackSymbol} />
-              <MoverList title="TOP LOSERS" items={market.losers} tone="down" page={moverPages.losers} setPage={(nextPage) => setMoverPages((pages) => ({ ...pages, losers: nextPage }))} selectedSymbol={selectedSymbol} selectSymbol={selectMarketSymbol} tracked={tracked} trackSymbol={trackSymbol} untrackSymbol={untrackSymbol} />
+              <MoverList title="TOP GAINERS" items={market.gainers} tone="up" page={moverPages.gainers} setPage={(nextPage) => setMoverPages((pages) => ({ ...pages, gainers: nextPage }))} selectedSymbol={selectedSymbol} selectSymbol={navigateStock} tracked={tracked} trackSymbol={trackSymbol} untrackSymbol={untrackSymbol} />
+              <MoverList title="TOP LOSERS" items={market.losers} tone="down" page={moverPages.losers} setPage={(nextPage) => setMoverPages((pages) => ({ ...pages, losers: nextPage }))} selectedSymbol={selectedSymbol} selectSymbol={navigateStock} tracked={tracked} trackSymbol={trackSymbol} untrackSymbol={untrackSymbol} />
             </div>
           </div>
           <MarketChart symbol={selectedSymbol} displayName={marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
@@ -528,10 +555,24 @@ function App() {
         <div className="section-intro"><div><p className="eyebrow">SECTOR CONSTITUENTS</p><h2>{sectorStocks.sector || sectorSlug.replaceAll('-', ' ')}</h2></div><div className="market-status"><p>Active US-listed stocks in this sector, ranked by daily percentage change.</p>{sectorStocks.updated_at && <span>UPDATED {new Date(sectorStocks.updated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>}</div></div>
         <div className="sector-stock-table panel">
           <div className="sector-stock-head"><span>RANK</span><span>SYMBOL</span><span>COMPANY</span><span>PRICE</span><span>DAILY CHANGE</span></div>
-          {busy === 'sector' ? <div className="sector-empty">LOADING SECTOR STOCKS…</div> : sectorStocks.stocks.map((stock, index) => <button key={stock.symbol} onClick={() => selectMarketSymbol(stock.symbol)}><span>{String(((sectorPage - 1) * 10) + index + 1).padStart(2, '0')}</span><strong>{stock.symbol}</strong><em>{stock.name}</em><span>${stock.price.toFixed(2)}</span><b className={stock.change_percent >= 0 ? 'up' : 'down'}>{stock.change_percent >= 0 ? '+' : ''}{stock.change_percent.toFixed(2)}%</b></button>)}
+          {busy === 'sector' ? <div className="sector-empty">LOADING SECTOR STOCKS…</div> : sectorStocks.stocks.map((stock, index) => <button key={stock.symbol} onClick={() => navigateStock(stock.symbol)}><span>{String(((sectorPage - 1) * 10) + index + 1).padStart(2, '0')}</span><strong>{stock.symbol}</strong><em>{stock.name}</em><span>${stock.price.toFixed(2)}</span><b className={stock.change_percent >= 0 ? 'up' : 'down'}>{stock.change_percent >= 0 ? '+' : ''}{stock.change_percent.toFixed(2)}%</b></button>)}
           {!sectorStocks.stocks.length && busy !== 'sector' && <div className="sector-empty">NO STOCKS AVAILABLE</div>}
           <div className="sector-pagination"><button disabled={sectorPage === 1 || busy === 'sector'} onClick={() => setSectorPage((value) => value - 1)}>← PREVIOUS</button><span>PAGE {sectorPage} / {Math.max(1, Math.ceil(sectorStocks.total / 10))} · {sectorStocks.total} STOCKS</span><button disabled={sectorPage >= Math.ceil(sectorStocks.total / 10) || busy === 'sector'} onClick={() => setSectorPage((value) => value + 1)}>NEXT →</button></div>
         </div>
+      </section>}
+
+      {page === 'stock' && <section className="stock-detail-page page-surface">
+        <button className="back-link" onClick={() => window.history.length > 1 ? window.history.back() : navigate('dashboard')}>← BACK</button>
+        {stockDetail ? <>
+          <section className="stock-summary panel">
+            <div className="stock-identity"><div><p className="eyebrow">{stockDetail.exchange || 'US MARKET'} · {stockDetail.currency || 'USD'}</p><h1>{stockDetail.symbol}</h1><h2>{stockDetail.name}</h2><p>{[stockDetail.sector, stockDetail.industry].filter(Boolean).join(' · ')}</p></div><div className="stock-price"><strong>${stockDetail.price.toFixed(2)}</strong><span className={(stockDetail.change_percent || 0) >= 0 ? 'up' : 'down'}>{stockDetail.change_percent >= 0 ? '+' : ''}{stockDetail.change?.toFixed(2)} ({stockDetail.change_percent?.toFixed(2)}%)</span><small>{stockDetail.market_state || 'MARKET DATA'}</small></div></div>
+            <div className="stock-actions"><button className={tracked.some((item) => item.symbol === stockDetail.symbol) ? 'active' : ''} onClick={() => tracked.some((item) => item.symbol === stockDetail.symbol) ? untrackSymbol(stockDetail.symbol) : trackSymbol(stockDetail.symbol)}>{tracked.some((item) => item.symbol === stockDetail.symbol) ? '★ IN FAVORITES' : '☆ ADD TO FAVORITES'}</button><button className="primary" onClick={() => createAlertForStock(stockDetail.symbol)}>CREATE ALERT →</button></div>
+            <div className="stock-stats">{[
+              ['OPEN', stockDetail.open, 'price'], ['PREVIOUS CLOSE', stockDetail.previous_close, 'price'], ['DAY HIGH', stockDetail.day_high, 'price'], ['DAY LOW', stockDetail.day_low, 'price'], ['VOLUME', stockDetail.volume, 'number'], ['MARKET CAP', stockDetail.market_cap, 'compact'], ['52W HIGH', stockDetail.fifty_two_week_high, 'price'], ['52W LOW', stockDetail.fifty_two_week_low, 'price'],
+            ].map(([label, value, format]) => <div key={label}><span>{label}</span><strong>{value == null ? '—' : format === 'price' ? `$${Number(value).toFixed(2)}` : format === 'compact' ? Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(value) : Number(value).toLocaleString()}</strong></div>)}</div>
+          </section>
+          <MarketChart symbol={selectedSymbol} displayName={stockDetail.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} />
+        </> : <div className="stock-detail-loading panel">{busy === 'stock-detail' ? 'LOADING STOCK DETAILS…' : 'STOCK DETAILS UNAVAILABLE'}</div>}
       </section>}
 
       {page === 'favorites' && <>

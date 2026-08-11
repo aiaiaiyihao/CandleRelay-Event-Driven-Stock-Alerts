@@ -9,10 +9,12 @@ from app.services.yfinance_service import (
     CHART_PRESETS,
     fetch_chart_yfinance,
     fetch_chart_preset_yfinance,
+    fetch_stock_detail_yfinance,
     search_stocks_yfinance,
 )
 from app.schemas.stock_chart import StockChartResponse
 from app.schemas.stock_search import StockSearchResult
+from app.schemas.stock_detail import StockDetailResponse
 from sqlalchemy.orm import Session
 from app.core.config import get_db
 
@@ -25,6 +27,14 @@ async def search_stocks(q: str = Query(..., min_length=1, max_length=80)):
         return await search_stocks_yfinance(q.strip())
     except ValueError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
+
+
+@router.get("/stocks/{symbol}/detail", response_model=StockDetailResponse)
+async def get_stock_detail(symbol: str):
+    try:
+        return await fetch_stock_detail_yfinance(symbol.upper())
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
 
 
 @router.get("/stocks/{symbol}/chart", response_model=StockChartResponse)

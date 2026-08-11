@@ -50,5 +50,6 @@ export const api = {
   acknowledge: (id) => request(`/alerts/${id}/acknowledge`, { method: 'POST' }),
   quote: (symbol) => request(`/prices/latest?symbol=${encodeURIComponent(symbol)}`),
   searchStocks: (query) => request(`/stocks/search?q=${encodeURIComponent(query)}`),
+  stockDetail: (symbol) => request(`/stocks/${encodeURIComponent(symbol)}/detail`),
   chart: (symbol, period) => request(`/stocks/${encodeURIComponent(symbol)}/chart?period=${encodeURIComponent(period)}`),
 }
