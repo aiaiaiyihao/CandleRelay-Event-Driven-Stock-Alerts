@@ -8,7 +8,7 @@ from app.models.Rule import Rule, RuleVersion
 from app.services.live_rule_processor import LiveRuleProcessor
 
 
-def definition():
+def definition(cooldown_seconds=0):
     return {
         "dsl_version": "1.0",
         "symbol": "NVDA",
@@ -27,6 +27,8 @@ def definition():
                 },
             ]
         },
+        "trigger": "while_true",
+        "cooldown_seconds": cooldown_seconds,
     }
 
 
@@ -46,7 +48,7 @@ def bar(day, close, volume):
     )
 
 
-def setup_session(enabled=True):
+def setup_session(enabled=True, cooldown_seconds=0):
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = sessionmaker(bind=engine)()
@@ -56,7 +58,9 @@ def setup_session(enabled=True):
         timeframe="1d",
         enabled=enabled,
     )
-    rule.versions.append(RuleVersion(version=1, dsl=definition()))
+    rule.versions.append(
+        RuleVersion(version=1, dsl=definition(cooldown_seconds=cooldown_seconds))
+    )
     session.add(rule)
     session.commit()
     return session
@@ -99,3 +103,18 @@ def test_does_not_evaluate_disabled_rules():
     alerts = processor.process(bar(3, 80, 300), session)
 
     assert alerts == []
+
+
+def test_database_cooldown_survives_processor_restart():
+    session = setup_session(cooldown_seconds=172800)
+    first_processor = LiveRuleProcessor()
+    for item in [bar(1, 100, 100), bar(2, 100, 100), bar(3, 80, 300)]:
+        first_processor.process(item, session)
+
+    restarted_processor = LiveRuleProcessor()
+    for item in [bar(1, 100, 100), bar(2, 100, 100)]:
+        restarted_processor.process(item, session)
+    alerts = restarted_processor.process(bar(4, 70, 300), session)
+
+    assert alerts == []
+    assert len(session.execute(select(Alert)).scalars().all()) == 1

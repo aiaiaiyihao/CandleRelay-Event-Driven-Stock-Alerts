@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -57,7 +57,11 @@ class LiveRuleProcessor:
                 event,
                 snapshot,
             )
-            if evaluation.triggered:
+            if (
+                evaluation.triggered
+                and not self._already_alerted(rule, event, session)
+                and self._cooldown_elapsed(rule, definition, event, session)
+            ):
                 alerts.append(self._persist_alert(rule, event, evaluation, session))
         session.commit()
         return alerts
@@ -101,7 +105,36 @@ class LiveRuleProcessor:
         session.add(alert)
         return alert
 
+    @staticmethod
+    def _already_alerted(rule: Rule, event: MarketEvent, session: Session) -> bool:
+        dedupe_key = f"{rule.id}:v{rule.current_version}:{event.timestamp.isoformat()}"
+        return session.execute(
+            select(Alert.id).where(Alert.dedupe_key == dedupe_key)
+        ).scalar_one_or_none() is not None
+
+    @staticmethod
+    def _cooldown_elapsed(
+        rule: Rule,
+        definition: RuleDefinition,
+        event: MarketEvent,
+        session: Session,
+    ) -> bool:
+        if definition.cooldown_seconds == 0:
+            return True
+        latest_alert_at = session.execute(
+            select(Alert.market_timestamp)
+            .where(Alert.rule_id == rule.id)
+            .order_by(Alert.market_timestamp.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if latest_alert_at is not None and latest_alert_at.tzinfo is None:
+            latest_alert_at = latest_alert_at.replace(tzinfo=timezone.utc)
+        return (
+            latest_alert_at is None
+            or event.timestamp
+            >= latest_alert_at + timedelta(seconds=definition.cooldown_seconds)
+        )
+
 
 def _json_number(value: Decimal | None) -> str | None:
     return str(value) if value is not None else None
-
