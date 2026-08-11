@@ -186,6 +186,7 @@ function App() {
   const [stockDetail, setStockDetail] = useState(null)
   const [favoriteQuotes, setFavoriteQuotes] = useState([])
   const [favoriteNews, setFavoriteNews] = useState([])
+  const [favoriteNewsPage, setFavoriteNewsPage] = useState(0)
   const [favoriteSort, setFavoriteSort] = useState('change_desc')
   const [favoritePage, setFavoritePage] = useState(0)
   const [search, setSearch] = useState('NVDA')
@@ -260,6 +261,7 @@ function App() {
   }, [tracked])
 
   useEffect(() => {
+    setFavoriteNewsPage(0)
     if (page === 'favorites' && user && tracked.length) api.favoriteNews().then(setFavoriteNews).catch(() => setFavoriteNews([]))
     else setFavoriteNews([])
   }, [page, user, tracked])
@@ -327,10 +329,20 @@ function App() {
   }), [tracked, marketBySymbol, favoriteSort])
   const favoritePageCount = Math.max(1, Math.ceil(sortedFavorites.length / 10))
   const visibleFavorites = sortedFavorites.slice(favoritePage * 10, (favoritePage + 1) * 10)
+  const sortedFavoriteNews = useMemo(
+    () => [...favoriteNews].sort((left, right) => new Date(right.published_at || 0) - new Date(left.published_at || 0)),
+    [favoriteNews],
+  )
+  const favoriteNewsPageCount = Math.max(1, Math.ceil(sortedFavoriteNews.length / 10))
+  const visibleFavoriteNews = sortedFavoriteNews.slice(favoriteNewsPage * 10, (favoriteNewsPage + 1) * 10)
 
   useEffect(() => {
     setFavoritePage((current) => Math.min(current, favoritePageCount - 1))
   }, [favoritePageCount])
+
+  useEffect(() => {
+    setFavoriteNewsPage((current) => Math.min(current, favoriteNewsPageCount - 1))
+  }, [favoriteNewsPageCount])
 
   async function refreshMarket() {
     setBusy('market-refresh')
@@ -661,8 +673,9 @@ function App() {
       <section className="favorite-news panel">
         <div className="favorite-news-heading"><div><p className="eyebrow">YOUR WATCHLIST · LATEST COVERAGE</p><h2>Favorites News</h2></div><span>{favoriteNews.length} STORIES</span></div>
         <div className="favorite-news-grid">
-          {favoriteNews.length ? [...favoriteNews].sort((left, right) => new Date(right.published_at || 0) - new Date(left.published_at || 0)).map((item) => <a key={`${item.symbol}-${item.url}`} href={item.url} target="_blank" rel="noreferrer"><span>{item.symbol}</span><strong>{item.title}</strong><small>{item.publisher}{item.published_at ? ` · ${new Date(item.published_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</small></a>) : <div className="favorite-news-empty">{tracked.length ? 'NO RECENT NEWS AVAILABLE' : 'ADD FAVORITES TO BUILD YOUR NEWS FEED'}</div>}
+          {visibleFavoriteNews.length ? visibleFavoriteNews.map((item) => <a key={`${item.symbol}-${item.url}`} href={item.url} target="_blank" rel="noreferrer"><span>{item.symbol}</span><strong>{item.title}</strong><small>{item.publisher}{item.published_at ? ` · ${new Date(item.published_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</small></a>) : <div className="favorite-news-empty">{tracked.length ? 'NO RECENT NEWS AVAILABLE' : 'ADD FAVORITES TO BUILD YOUR NEWS FEED'}</div>}
         </div>
+        {sortedFavoriteNews.length > 0 && <div className="favorite-news-pagination"><button disabled={favoriteNewsPage === 0} onClick={() => setFavoriteNewsPage((value) => value - 1)}>← PREVIOUS</button><span>PAGE {favoriteNewsPage + 1} / {favoriteNewsPageCount} · 10 PER PAGE</span><button disabled={favoriteNewsPage >= favoriteNewsPageCount - 1} onClick={() => setFavoriteNewsPage((value) => value + 1)}>NEXT →</button></div>}
       </section>
       </>}
 
