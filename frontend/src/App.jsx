@@ -70,6 +70,12 @@ function Condition({ item, index }) {
 }
 
 function App() {
+  const [user, setUser] = useState(null)
+  const [authOpen, setAuthOpen] = useState(false)
+  const [authMode, setAuthMode] = useState('login')
+  const [authIdentifier, setAuthIdentifier] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authMessage, setAuthMessage] = useState('')
   const [text, setText] = useState(SAMPLE_TEXT)
   const [definition, setDefinition] = useState(SAMPLE_DEFINITION)
   const [warning, setWarning] = useState('No timeframe specified - defaulted to daily bars')
@@ -90,6 +96,7 @@ function App() {
   const [message, setMessage] = useState('Ready to compile')
 
   useEffect(() => {
+    api.me().then(setUser).catch(() => {})
     api.alerts().then(setAlerts).catch(() => {})
     api.watchlist().then(setTracked).catch(() => {})
   }, [])
@@ -133,6 +140,30 @@ function App() {
   }, [search])
 
   const returns = useMemo(() => backtest?.result_summary?.average_forward_returns || {}, [backtest])
+
+  async function submitAuth(event) {
+    event.preventDefault()
+    setBusy('auth')
+    setAuthMessage(authMode === 'login' ? 'Signing in…' : 'Creating account…')
+    try {
+      const result = authMode === 'login'
+        ? await api.login(authIdentifier, authPassword)
+        : await api.register(authIdentifier, authPassword)
+      setUser(result)
+      setAuthOpen(false)
+      setAuthPassword('')
+      setAuthMessage('')
+    } catch (error) {
+      setAuthMessage(error.message)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function logout() {
+    await api.logout().catch(() => {})
+    setUser(null)
+  }
 
   async function compileRule() {
     setBusy('compile')
@@ -249,8 +280,36 @@ function App() {
           <span>SignalForge</span>
         </a>
         <div className="system-state"><i /> EVENT STREAM ACTIVE</div>
-        <div className="header-meta"><span>NVDA</span><strong>$120.00</strong><em>−14.29%</em></div>
+        <div className="account-actions">
+          {user ? (
+            <><span>{user.identifier}</span><button onClick={logout}>Sign out</button></>
+          ) : (
+            <button className="sign-in-button" onClick={() => setAuthOpen(true)}>Sign in / Register</button>
+          )}
+        </div>
       </header>
+
+      {authOpen && (
+        <div className="auth-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setAuthOpen(false)}>
+          <section className="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+            <button className="auth-close" onClick={() => setAuthOpen(false)} aria-label="Close account dialog">×</button>
+            <p className="eyebrow">PERSONAL SIGNALFORGE ACCOUNT</p>
+            <h2 id="auth-title">{authMode === 'login' ? 'Welcome back.' : 'Create your account.'}</h2>
+            <p className="auth-copy">Use an email address or phone number to keep your market workspace personal.</p>
+            <div className="auth-tabs">
+              <button className={authMode === 'login' ? 'active' : ''} onClick={() => { setAuthMode('login'); setAuthMessage('') }}>Sign in</button>
+              <button className={authMode === 'register' ? 'active' : ''} onClick={() => { setAuthMode('register'); setAuthMessage('') }}>Register</button>
+            </div>
+            <form onSubmit={submitAuth}>
+              <label>Email or phone number<input autoFocus value={authIdentifier} onChange={(event) => setAuthIdentifier(event.target.value)} placeholder="trader@example.com or +14155550100" autoComplete="username" /></label>
+              <label>Password<input type="password" minLength="8" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder="At least 8 characters" autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} /></label>
+              {authMessage && <p className="auth-message">{authMessage}</p>}
+              <button className="auth-submit" disabled={busy === 'auth'}>{authMode === 'login' ? 'Sign in' : 'Create account'} <span>→</span></button>
+            </form>
+            {authMode === 'register' && <small>No verification message is sent in this portfolio demo.</small>}
+          </section>
+        </div>
+      )}
 
       <section className="hero" id="top">
         <div>

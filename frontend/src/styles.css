@@ -3,7 +3,7 @@
 :root { color-scheme: dark; font-family: Manrope, sans-serif; background: #090b0c; color: #f1f0eb; font-synthesis: none; }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; background: radial-gradient(circle at 67% -10%, #282017 0, #0d0f10 30%, #090b0c 58%); }
-button, textarea { font: inherit; }
+button, textarea, input { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: wait; opacity: .55; }
 main { max-width: 1440px; margin: auto; min-height: 100vh; padding: 0 42px; }
@@ -14,6 +14,8 @@ main { max-width: 1440px; margin: auto; min-height: 100vh; padding: 0 42px; }
 .system-state i, .status-copy i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #5fd398; box-shadow: 0 0 12px #5fd398; margin-right: 9px; }
 .header-meta { justify-self: end; display: flex; align-items: baseline; gap: 10px; font: 12px DM Mono; }
 .header-meta span { color: #858782; } .header-meta strong { font-size: 14px; } .header-meta em { color: #ee7951; font-style: normal; }
+.account-actions { justify-self: end; display: flex; align-items: center; gap: 12px; font: 9px DM Mono; }.account-actions span { max-width: 190px; overflow: hidden; color: #92948f; text-overflow: ellipsis; white-space: nowrap; }.account-actions button { border: 1px solid #393b3b; background: transparent; color: #c9cac5; padding: 8px 11px; font: 9px DM Mono; }.account-actions .sign-in-button { border-color: #68402c; color: #e76d2d; }
+.auth-overlay { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 18px; background: rgba(4,5,6,.78); backdrop-filter: blur(8px); }.auth-dialog { position: relative; width: min(450px,100%); padding: 34px; border: 1px solid #3a3d3d; background: linear-gradient(145deg,#17191a,#0d0f10); box-shadow: 0 30px 90px rgba(0,0,0,.7); }.auth-close { position: absolute; top: 12px; right: 14px; border: 0; background: transparent; color: #747773; font-size: 22px; }.auth-dialog h2 { margin: 0; font-size: 30px; letter-spacing: -.04em; }.auth-copy { color: #7e817c; font-size: 12px; line-height: 1.6; }.auth-tabs { display: grid; grid-template-columns: 1fr 1fr; margin: 24px 0 18px; border-bottom: 1px solid #303233; }.auth-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; color: #656864; padding: 10px; font: 10px DM Mono; }.auth-tabs button.active { border-color: #e76d2d; color: #e76d2d; }.auth-dialog form { display: grid; gap: 14px; }.auth-dialog label { display: grid; gap: 7px; color: #838681; font: 9px DM Mono; letter-spacing: .05em; }.auth-dialog input { width: 100%; height: 46px; border: 1px solid #373a3a; outline: 0; background: #0b0d0e; color: #ecebe5; padding: 0 12px; font-size: 12px; }.auth-dialog input:focus { border-color: #8a4b2b; }.auth-submit { height: 46px; margin-top: 4px; border: 0; background: #e76d2d; color: #160f0b; font-weight: 700; }.auth-submit span { float: right; margin-right: 5px; }.auth-message { margin: 0; color: #e0926c; font: 9px DM Mono; }.auth-dialog small { display: block; margin-top: 15px; color: #5f625e; font: 8px DM Mono; }
 .hero { min-height: 285px; padding: 62px 0 45px; display: flex; align-items: end; justify-content: space-between; gap: 70px; }
 .eyebrow { margin: 0 0 22px; color: #e76d2d; font: 500 10px DM Mono; letter-spacing: .17em; }
 h1 { margin: 0; max-width: 780px; font-size: clamp(44px, 5.4vw, 78px); line-height: .98; letter-spacing: -.065em; font-weight: 500; }

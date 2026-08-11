@@ -12,6 +12,7 @@ from app.models.BacktestRun import BacktestRun
 from app.models.Alert import Alert
 from app.models.MarketBar import MarketBar
 from app.models.WatchlistItem import WatchlistItem
+from app.models.User import User, UserSession
 
 
 config = context.config
