@@ -35,8 +35,8 @@ produce identical results. This behavior is covered by automated tests.
 - Alert listing, filtering, and acknowledgement
 - Deterministic Chinese and English natural-language compiler
 - Alembic-managed database schema
-- Responsive React rule, backtest, and alert dashboard
-- Persistent tracked-symbol watchlist with live ticker lookup
+- Three-page React workspace for markets, Favorites, and monitoring rules
+- Ticker autocomplete, live quote lookup, and persistent tracked symbols
 - Adaptive 30-minute through maximum-history charts with SMA20, SMA50, and SMA200 overlays
 - Email or phone registration with password hashing and server-side sessions
 - User-owned Favorites with live price, daily change, and sorting
@@ -77,12 +77,9 @@ Compiled DSL:
 }
 ```
 
-## Local setup
+## Quick start
 
 ```bash
-python -m venv marketDataServer
-source marketDataServer/bin/activate
-pip install -r requirements/dev.txt
 docker compose -f docker/docker-compose.yml up -d
 ```
 
@@ -95,13 +92,24 @@ Open:
 
 | Surface | URL |
 | --- | --- |
-| SignalForge dashboard | <http://localhost:3000> |
+| Market dashboard | <http://localhost:3000/dashboard> |
+| My Favorites | <http://localhost:3000/favorites> |
+| Rule Studio | <http://localhost:3000/rule-studio> |
 | FastAPI Swagger | <http://localhost:8000/docs> |
 | API health check | <http://localhost:8000/health> |
 
-For manual development without the API and worker containers:
+The root URL redirects to `/dashboard`. To stop the complete stack, run:
 
 ```bash
+docker compose -f docker/docker-compose.yml down
+```
+
+For manual backend development without the API and worker containers:
+
+```bash
+python -m venv marketDataServer
+source marketDataServer/bin/activate
+pip install -r requirements/dev.txt
 alembic upgrade head
 uvicorn app.main:app --reload
 python -m app.kafka.SignalConsumer
@@ -124,15 +132,23 @@ KAFKA_SIGNAL_GROUP=signalforge-live-rules
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 ```
 
-## React dashboard
+## React application
 
-The dashboard combines market discovery with the project's differentiating rule workflow:
+The frontend deliberately separates its three workflows:
+
+| Page | Purpose |
+| --- | --- |
+| Dashboard | Explore major US indexes and the daily Top 10 gainers and losers. Click any row to update the chart and use its star to save the stock. |
+| My Favorites | Search tickers with autocomplete, manage the signed-in user's private list, sort by daily performance, and inspect a selected chart. |
+| Rule Studio | Compile natural language into validated Rule DSL, run historical replay, activate monitoring, and review alerts. |
+
+A typical demo flow is:
 
 1. Review S&P 500, Nasdaq, Dow Jones, and Russell 2000 performance.
 2. Select a major index or a Top 10 gainer/loser to inspect its chart.
-3. Switch chart ranges and toggle common moving averages.
+3. Switch the chart horizon and toggle SMA20, SMA50, and SMA200.
 4. Sign in and save stocks to a private, sortable Favorites list.
-5. Write a market rule in natural language.
+5. Open Rule Studio and write a market rule in natural language.
 6. Compile the text into a validated and explainable Rule DSL.
 7. Review, activate, and replay the versioned rule.
 8. View alerts produced by the live Kafka worker.
@@ -210,10 +226,25 @@ DELETE /watchlist/{symbol}
 
 The dashboard uses exact ticker lookup for the latest yfinance quote. Tracked
 symbols are stored in PostgreSQL and remain available after a page refresh.
-The chart supports `30m`, `60m`, `1d`, `1wk`, `1mo`, `3mo`, `1y`, `5y`, and
-`max` ranges. Sampling automatically becomes coarser for longer ranges, from
-five-minute intraday points to monthly maximum-history points. SMA20, SMA50,
-and SMA200 are calculated from the underlying sampled series before display.
+The chart uses one mutually exclusive horizon at a time and automatically uses
+coarser sampling for longer history:
+
+| UI label | API period | Display window | Sampling |
+| --- | --- | --- | --- |
+| 30 MIN | `30m` | 30 minutes | 5-minute points |
+| 60 MIN | `60m` | 60 minutes | 5-minute points |
+| 1D | `1d` | 1 trading day | 5-minute points |
+| 1W | `1wk` | 5 trading days | 30-minute points |
+| 1M | `1mo` | About 22 trading days | Hourly points |
+| 3M | `3mo` | About 63 trading days | Daily points |
+| 1Y | `1y` | About 252 trading days | Weekly points |
+| 5Y | `5y` | About 1,260 trading days | Monthly points |
+| MAX | `max` | Full available history | Monthly points |
+
+SMA20, SMA50, and SMA200 are calculated with pre-window warmup data. This lets
+an average begin at the left edge of a short chart without pretending that the
+visible points alone form the complete calculation window. An SMA is hidden
+when the provider does not return enough warmup history.
 
 ### Market dashboard and Favorites
 
