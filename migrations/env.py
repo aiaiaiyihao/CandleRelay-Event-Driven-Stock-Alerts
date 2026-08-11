@@ -8,6 +8,7 @@ from app.models.MovingAverage import MovingAverage
 from app.models.PollTask import PollTask
 from app.models.RawPrice import RawPrice
 from app.models.Rule import Rule, RuleVersion
+from app.models.BacktestRun import BacktestRun
 
 
 config = context.config
