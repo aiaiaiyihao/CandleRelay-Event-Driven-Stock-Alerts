@@ -24,6 +24,8 @@ class MarketOverview(BaseModel):
     scope: str = "Active US-listed stocks"
     market_state: str = "CLOSED"
     updated_at: datetime | None = None
+    data_source: str = "yfinance"
+    data_status: str = "live"
 
 
 class SectorStocksResponse(BaseModel):

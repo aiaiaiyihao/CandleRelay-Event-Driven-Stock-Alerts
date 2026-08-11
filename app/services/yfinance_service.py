@@ -2,6 +2,7 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime, timezone
 import asyncio
+import logging
 import time
 
 from app.services.cache import get_cached_json, set_cached_json
@@ -46,6 +47,8 @@ SECTOR_ETFS = {
     "utilities": ("Utilities", "XLU"),
 }
 MARKET_OVERVIEW_CACHE_SECONDS = 60
+MARKET_OVERVIEW_LAST_GOOD_KEY = "candlerelay:market-overview:last-good"
+MARKET_OVERVIEW_LAST_GOOD_TTL_SECONDS = 86_400
 _market_overview_cache: tuple[float, dict] | None = None
 
 #call remote api to fetch price
@@ -330,11 +333,20 @@ async def fetch_market_overview(force_refresh: bool = False) -> dict:
     if not force_refresh and _market_overview_cache and now - _market_overview_cache[0] < MARKET_OVERVIEW_CACHE_SECONDS:
         return _market_overview_cache[1]
 
-    indexes, movers, sectors = await asyncio.gather(
-        fetch_market_snapshots(list(MARKET_INDEXES)),
-        fetch_market_movers(),
-        fetch_sector_performance(),
-    )
+    last_good = await get_cached_json(MARKET_OVERVIEW_LAST_GOOD_KEY)
+    try:
+        indexes, movers, sectors = await asyncio.gather(
+            fetch_market_snapshots(list(MARKET_INDEXES)),
+            fetch_market_movers(),
+            fetch_sector_performance(),
+        )
+    except ValueError:
+        if last_good is None:
+            raise
+        stale = {**last_good, "data_status": "stale"}
+        _market_overview_cache = (now, stale)
+        logging.warning("Market overview upstream failed; serving last-known-good Redis data")
+        return stale
     overview = {
         "indexes": indexes,
         "gainers": movers["gainers"],
@@ -343,8 +355,15 @@ async def fetch_market_overview(force_refresh: bool = False) -> dict:
         "scope": "Active US-listed stocks (Nasdaq, NYSE, NYSE American; price $1+, volume 100K+)",
         "market_state": movers["market_state"],
         "updated_at": movers["updated_at"],
+        "data_source": "yfinance",
+        "data_status": "live",
     }
     _market_overview_cache = (now, overview)
+    await set_cached_json(
+        MARKET_OVERVIEW_LAST_GOOD_KEY,
+        overview,
+        ttl_seconds=MARKET_OVERVIEW_LAST_GOOD_TTL_SECONDS,
+    )
     return overview
 
 
@@ -356,10 +375,17 @@ async def fetch_market_movers() -> dict:
             yf.screen(query, size=50, sortField="percentchange", sortAsc=True),
         )
 
-    try:
-        gainers_screen, losers_screen = await asyncio.to_thread(load_screens)
-    except Exception as exc:
-        raise ValueError(f"yfinance market screener error: {exc}") from exc
+    error = None
+    for attempt in range(3):
+        try:
+            gainers_screen, losers_screen = await asyncio.to_thread(load_screens)
+            break
+        except Exception as exc:
+            error = exc
+            if attempt < 2:
+                await asyncio.sleep(0.4 * (2 ** attempt))
+    else:
+        raise ValueError(f"yfinance market screener error after 3 attempts: {error}") from error
 
     gainers = build_screener_snapshots(gainers_screen.get("quotes", []), descending=True)
     losers = build_screener_snapshots(losers_screen.get("quotes", []), descending=False)

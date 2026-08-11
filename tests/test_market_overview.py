@@ -1,10 +1,12 @@
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.market_router import router
-from app.services.yfinance_service import build_screener_snapshots
+from app.services import yfinance_service
+from app.services.yfinance_service import build_screener_snapshots, fetch_market_overview
 
 
 def test_market_overview_returns_indexes_and_rankings():
@@ -34,6 +36,25 @@ def test_market_overview_can_force_a_refresh():
 
     assert response.status_code == 200
     fetch.assert_awaited_once_with(force_refresh=True)
+
+
+def test_market_overview_returns_last_good_data_when_upstream_fails():
+    stale = {
+        "indexes": [], "gainers": [], "losers": [], "sectors": [],
+        "scope": "Active US-listed stocks", "market_state": "CLOSED",
+        "updated_at": None, "data_source": "yfinance", "data_status": "live",
+    }
+    yfinance_service._market_overview_cache = None
+    with (
+        patch("app.services.yfinance_service.get_cached_json", new=AsyncMock(return_value=stale)),
+        patch("app.services.yfinance_service.fetch_market_snapshots", new=AsyncMock(side_effect=ValueError("upstream failed"))),
+        patch("app.services.yfinance_service.fetch_market_movers", new=AsyncMock(return_value={})),
+        patch("app.services.yfinance_service.fetch_sector_performance", new=AsyncMock(return_value=[])),
+    ):
+        result = asyncio.run(fetch_market_overview(force_refresh=True))
+
+    assert result["data_status"] == "stale"
+    assert result["data_source"] == "yfinance"
 
 
 def test_market_quotes_returns_requested_favorite_snapshots():
