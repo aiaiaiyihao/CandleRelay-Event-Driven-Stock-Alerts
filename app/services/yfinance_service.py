@@ -49,6 +49,8 @@ SECTOR_ETFS = {
     "utilities": ("Utilities", "XLU"),
 }
 MARKET_OVERVIEW_CACHE_SECONDS = 60
+MARKET_OVERVIEW_LIVE_KEY = "candlerelay:market-overview:live"
+MARKET_OVERVIEW_LIVE_TTL_SECONDS = 300
 MARKET_OVERVIEW_LAST_GOOD_KEY = "candlerelay:market-overview:last-good"
 MARKET_OVERVIEW_LAST_GOOD_TTL_SECONDS = 86_400
 MARKET_OVERVIEW_CLOSED_KEY = "candlerelay:market-overview:closed"
@@ -367,6 +369,11 @@ async def fetch_market_overview(
     if closed_snapshot is not None and not refresh_closed_snapshot:
         _market_overview_cache = (now, closed_snapshot)
         return closed_snapshot
+    if not force_refresh:
+        live_snapshot = await get_cached_json(MARKET_OVERVIEW_LIVE_KEY)
+        if live_snapshot is not None:
+            _market_overview_cache = (now, live_snapshot)
+            return live_snapshot
     if not force_refresh and _market_overview_cache and now - _market_overview_cache[0] < MARKET_OVERVIEW_CACHE_SECONDS:
         return _market_overview_cache[1]
 
@@ -406,6 +413,12 @@ async def fetch_market_overview(
             MARKET_OVERVIEW_CLOSED_KEY,
             overview,
             ttl_seconds=seconds_until_next_us_market_open(),
+        )
+    elif overview["market_state"] == "OPEN":
+        await set_cached_json(
+            MARKET_OVERVIEW_LIVE_KEY,
+            overview,
+            ttl_seconds=MARKET_OVERVIEW_LIVE_TTL_SECONDS,
         )
     return overview
 
