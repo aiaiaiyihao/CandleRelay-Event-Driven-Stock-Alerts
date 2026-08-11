@@ -104,7 +104,7 @@ python -m app.kafka.SignalConsumer
 Import the included demo bars when running the services manually:
 
 ```bash
-python scripts/import_market_bars.py examples/nvda_daily.csv \
+python -m scripts.import_market_bars examples/nvda_daily.csv \
   --symbol NVDA --timeframe 1d --source demo
 ```
 
