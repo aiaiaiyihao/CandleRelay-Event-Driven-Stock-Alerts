@@ -19,3 +19,11 @@ class FavoriteResponse(BaseModel):
 
     symbol: str
     created_at: datetime
+
+
+class FavoriteNewsItem(BaseModel):
+    symbol: str
+    title: str
+    publisher: str
+    published_at: datetime | None = None
+    url: str

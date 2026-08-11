@@ -185,6 +185,7 @@ function App() {
   const [sectorSortOrder, setSectorSortOrder] = useState('desc')
   const [stockDetail, setStockDetail] = useState(null)
   const [favoriteQuotes, setFavoriteQuotes] = useState([])
+  const [favoriteNews, setFavoriteNews] = useState([])
   const [favoriteSort, setFavoriteSort] = useState('change_desc')
   const [favoritePage, setFavoritePage] = useState(0)
   const [search, setSearch] = useState('NVDA')
@@ -254,6 +255,11 @@ function App() {
     if (tracked.length) api.marketQuotes(tracked.map((item) => item.symbol)).then(setFavoriteQuotes).catch(() => setFavoriteQuotes([]))
     else setFavoriteQuotes([])
   }, [tracked])
+
+  useEffect(() => {
+    if (page === 'favorites' && user && tracked.length) api.favoriteNews().then(setFavoriteNews).catch(() => setFavoriteNews([]))
+    else setFavoriteNews([])
+  }, [page, user, tracked])
 
   useEffect(() => {
     if (page === 'favorites' && tracked.length && !tracked.some((item) => item.symbol === selectedSymbol)) {
@@ -638,6 +644,12 @@ function App() {
             )}
           </div>
           <MarketChart symbol={selectedSymbol} displayName={marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
+      </section>
+      <section className="favorite-news panel">
+        <div className="favorite-news-heading"><div><p className="eyebrow">YOUR WATCHLIST · LATEST COVERAGE</p><h2>Favorites News</h2></div><span>{favoriteNews.length} STORIES</span></div>
+        <div className="favorite-news-grid">
+          {favoriteNews.length ? [...favoriteNews].sort((left, right) => new Date(right.published_at || 0) - new Date(left.published_at || 0)).map((item) => <a key={`${item.symbol}-${item.url}`} href={item.url} target="_blank" rel="noreferrer"><span>{item.symbol}</span><strong>{item.title}</strong><small>{item.publisher}{item.published_at ? ` · ${new Date(item.published_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</small></a>) : <div className="favorite-news-empty">{tracked.length ? 'NO RECENT NEWS AVAILABLE' : 'ADD FAVORITES TO BUILD YOUR NEWS FEED'}</div>}
+        </div>
       </section>
       </>}
 

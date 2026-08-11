@@ -29,6 +29,7 @@ export const api = {
   sectorStocks: (sector, page = 1, sortOrder = 'desc') => request(`/market/sectors/${encodeURIComponent(sector)}/stocks?page=${page}&page_size=10&sort_order=${sortOrder}`),
   marketQuotes: (symbols) => request(`/market/quotes?symbols=${encodeURIComponent(symbols.join(','))}`),
   favorites: () => request('/favorites'),
+  favoriteNews: () => request('/favorites/news'),
   addFavorite: (symbol) => request('/favorites', {
     method: 'POST',
     body: JSON.stringify({ symbol }),
