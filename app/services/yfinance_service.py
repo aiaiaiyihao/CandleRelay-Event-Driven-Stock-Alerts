@@ -1,6 +1,7 @@
 import yfinance as yf
 import pandas as pd
-from datetime import datetime, timezone
+from datetime import datetime, time as datetime_time, timedelta, timezone
+from zoneinfo import ZoneInfo
 import asyncio
 import logging
 import time
@@ -48,9 +49,25 @@ SECTOR_ETFS = {
     "utilities": ("Utilities", "XLU"),
 }
 MARKET_OVERVIEW_CACHE_SECONDS = 60
+MARKET_OVERVIEW_LIVE_KEY = "candlerelay:market-overview:live"
+MARKET_OVERVIEW_LIVE_TTL_SECONDS = 300
 MARKET_OVERVIEW_LAST_GOOD_KEY = "candlerelay:market-overview:last-good"
 MARKET_OVERVIEW_LAST_GOOD_TTL_SECONDS = 86_400
+MARKET_OVERVIEW_CLOSED_KEY = "candlerelay:market-overview:closed"
+US_MARKET_TIMEZONE = ZoneInfo("America/New_York")
 _market_overview_cache: tuple[float, dict] | None = None
+
+
+def seconds_until_next_us_market_open(now: datetime | None = None) -> int:
+    current = (now or datetime.now(timezone.utc)).astimezone(US_MARKET_TIMEZONE)
+    candidate_date = current.date()
+    candidate = datetime.combine(candidate_date, datetime_time(9, 30), tzinfo=US_MARKET_TIMEZONE)
+    if current >= candidate:
+        candidate_date += timedelta(days=1)
+    while candidate_date.weekday() >= 5:
+        candidate_date += timedelta(days=1)
+    candidate = datetime.combine(candidate_date, datetime_time(9, 30), tzinfo=US_MARKET_TIMEZONE)
+    return max(60, int((candidate - current).total_seconds()))
 
 #call remote api to fetch price
 async def fetch_price_yfinance(symbol: str):
@@ -100,8 +117,16 @@ async def search_stocks_yfinance(query: str, limit: int = 6) -> list[dict]:
     ][:limit]
 
 
-async def fetch_stock_detail_yfinance(symbol: str, force_refresh: bool = False) -> dict:
+async def fetch_stock_detail_yfinance(
+    symbol: str,
+    force_refresh: bool = False,
+    refresh_closed_snapshot: bool = False,
+) -> dict:
     cache_key = f"candlerelay:stock-detail:{symbol.upper()}"
+    closed_cache_key = f"candlerelay:stock-detail:closed:{symbol.upper()}"
+    closed_snapshot = await get_cached_json(closed_cache_key)
+    if closed_snapshot is not None and not refresh_closed_snapshot:
+        return {**closed_snapshot, "news": await fetch_stock_news_yfinance(symbol)}
     if not force_refresh:
         cached = await get_cached_json(cache_key)
         if cached is not None:
@@ -142,6 +167,12 @@ async def fetch_stock_detail_yfinance(symbol: str, force_refresh: bool = False) 
         "updated_at": datetime.fromtimestamp(timestamp, tz=timezone.utc) if timestamp else datetime.now(timezone.utc),
     }
     await set_cached_json(cache_key, detail, ttl_seconds=60)
+    if detail["market_state"] != "REGULAR":
+        await set_cached_json(
+            closed_cache_key,
+            detail,
+            ttl_seconds=seconds_until_next_us_market_open(),
+        )
     return {**detail, "news": await fetch_stock_news_yfinance(symbol, force_refresh=force_refresh)}
 
 
@@ -328,9 +359,21 @@ def moving_average(values: list[float], period: int) -> list[float | None]:
     return result
 
 
-async def fetch_market_overview(force_refresh: bool = False) -> dict:
+async def fetch_market_overview(
+    force_refresh: bool = False,
+    refresh_closed_snapshot: bool = False,
+) -> dict:
     global _market_overview_cache
     now = time.monotonic()
+    closed_snapshot = await get_cached_json(MARKET_OVERVIEW_CLOSED_KEY)
+    if closed_snapshot is not None and not refresh_closed_snapshot:
+        _market_overview_cache = (now, closed_snapshot)
+        return closed_snapshot
+    if not force_refresh:
+        live_snapshot = await get_cached_json(MARKET_OVERVIEW_LIVE_KEY)
+        if live_snapshot is not None:
+            _market_overview_cache = (now, live_snapshot)
+            return live_snapshot
     if not force_refresh and _market_overview_cache and now - _market_overview_cache[0] < MARKET_OVERVIEW_CACHE_SECONDS:
         return _market_overview_cache[1]
 
@@ -365,6 +408,18 @@ async def fetch_market_overview(force_refresh: bool = False) -> dict:
         overview,
         ttl_seconds=MARKET_OVERVIEW_LAST_GOOD_TTL_SECONDS,
     )
+    if overview["market_state"] == "CLOSED" and overview["data_source"] == "yfinance":
+        await set_cached_json(
+            MARKET_OVERVIEW_CLOSED_KEY,
+            overview,
+            ttl_seconds=seconds_until_next_us_market_open(),
+        )
+    elif overview["market_state"] == "OPEN":
+        await set_cached_json(
+            MARKET_OVERVIEW_LIVE_KEY,
+            overview,
+            ttl_seconds=MARKET_OVERVIEW_LIVE_TTL_SECONDS,
+        )
     return overview
 
 

@@ -32,7 +32,9 @@ produce identical results. This behavior is covered by automated tests.
 - Historical event replay and persisted backtest summaries
 - Kafka market-event codec and manual-offset consumer
 - Database-backed alert deduplication and cooldown
-- Alert listing, filtering, and acknowledgement
+- User-scoped alert listing, notification center, acknowledgement, and optional email delivery
+- Yahoo WebSocket worker that subscribes only to symbols used by enabled alert rules
+- Shared five-minute Redis cache for live rankings and scheduled closing snapshots
 - Deterministic Chinese and English natural-language compiler
 - Alembic-managed database schema
 - Three-page React workspace for markets, Favorites, and monitoring rules
@@ -85,8 +87,8 @@ Compiled DSL:
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-This starts PostgreSQL, Redis, Kafka, the API, the live rule worker, and the
-React frontend. The API container applies Alembic migrations before serving
+This starts PostgreSQL, Redis, Kafka, the API, the Kafka rule worker, the active
+Yahoo quote stream, the closing-snapshot worker, and the React frontend. The API container applies Alembic migrations before serving
 traffic. CandleRelay uses the existing `signalforge_pgdata` volume so older local
 PostgreSQL projects do not interfere with the demo credentials.
 
@@ -133,12 +135,23 @@ KAFKA_BOOTSTRAP=localhost:9092
 KAFKA_SIGNAL_GROUP=crandleRelay-live-rules
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 ALPHA_VANTAGE_API_KEY=optional_api_key_for_market_movers_fallback
+SMTP_HOST=optional_smtp_server
+SMTP_PORT=587
+SMTP_USERNAME=optional_smtp_username
+SMTP_PASSWORD=optional_smtp_password
+SMTP_FROM_EMAIL=alerts@example.com
+SMTP_USE_TLS=true
 ```
 
 The dashboard retries transient yfinance screener failures and serves the last
 successful Redis snapshot when upstream data is unavailable. If
 `ALPHA_VANTAGE_API_KEY` is configured, Alpha Vantage Top 20 gainers and losers
 are used before the stale-cache fallback.
+During market hours, rankings are shared through a five-minute Redis cache.
+At 4:05 PM ET on weekdays, the closing worker freezes Dashboard data and warms
+popular and user-favorite stock details until the next 9:30 AM ET opening.
+Email alerts are enabled only when `SMTP_HOST` and `SMTP_FROM_EMAIL` are set;
+in-app notifications continue to work without SMTP configuration.
 
 ## React application
 

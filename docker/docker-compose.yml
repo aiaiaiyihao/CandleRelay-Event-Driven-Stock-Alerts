@@ -51,6 +51,15 @@ services:
       timeout: 10s
       retries: 12
 
+  kafka-init:
+    image: confluentinc/cp-kafka:7.4.0
+    command: >-
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists
+      --topic market-events --partitions 3 --replication-factor 1
+    depends_on:
+      kafka:
+        condition: service_healthy
+
   api:
     build:
       context: ..
@@ -63,6 +72,12 @@ services:
       REDIS_URL: redis://redis:6379/0
       KAFKA_BOOTSTRAP: kafka:29092
       ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
     ports:
       - "8000:8000"
     depends_on:
@@ -91,6 +106,30 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+
+  closing-snapshot-worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: python -m app.workers.closing_snapshot
+    environment: *signalforge-environment
+    depends_on:
+      api:
+        condition: service_healthy
+
+  live-quote-worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: python -m app.workers.live_quotes
+    environment: *signalforge-environment
+    depends_on:
+      api:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
 
   frontend:
     build:

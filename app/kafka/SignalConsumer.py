@@ -5,6 +5,7 @@ from confluent_kafka import Consumer
 from app.core.config import SessionLocal, consumer_config
 from app.kafka.market_events import decode_market_event
 from app.services.live_rule_processor import LiveRuleProcessor
+from app.services.email_notification_service import send_alert_emails
 
 
 class SignalConsumerWorker:
@@ -17,6 +18,7 @@ class SignalConsumerWorker:
         event = decode_market_event(payload)
         with self.session_factory() as session:
             alerts = self.processor.process(event, session)
+            send_alert_emails(alerts, session)
         return len(alerts)
 
     def run_once(self, timeout: float = 1.0) -> bool:

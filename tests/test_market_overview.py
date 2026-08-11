@@ -46,7 +46,7 @@ def test_market_overview_returns_last_good_data_when_upstream_fails():
     }
     yfinance_service._market_overview_cache = None
     with (
-        patch("app.services.yfinance_service.get_cached_json", new=AsyncMock(return_value=stale)),
+        patch("app.services.yfinance_service.get_cached_json", new=AsyncMock(side_effect=[None, stale])),
         patch("app.services.yfinance_service.fetch_market_snapshots", new=AsyncMock(side_effect=ValueError("upstream failed"))),
         patch("app.services.yfinance_service.fetch_market_movers", new=AsyncMock(return_value={})),
         patch("app.services.yfinance_service.fetch_sector_performance", new=AsyncMock(return_value=[])),
