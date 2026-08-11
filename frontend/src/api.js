@@ -2,6 +2,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_URL}${path}`, {
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...options.headers },
     ...options,
   })
@@ -14,6 +15,16 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  me: () => request('/auth/me'),
+  register: (identifier, password) => request('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ identifier, password }),
+  }),
+  login: (identifier, password) => request('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ identifier, password }),
+  }),
+  logout: () => request('/auth/logout', { method: 'POST' }),
   compile: (text) => request('/rules/compile', {
     method: 'POST',
     body: JSON.stringify({ text, cooldown_seconds: 3600 }),

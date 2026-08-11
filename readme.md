@@ -38,6 +38,7 @@ produce identical results. This behavior is covered by automated tests.
 - Responsive React rule, backtest, and alert dashboard
 - Persistent tracked-symbol watchlist with live ticker lookup
 - Interactive 1M/3M/6M/1Y price charts with SMA20, SMA50, and SMA200 overlays
+- Email or phone registration with password hashing and server-side sessions
 
 ## Example rule
 
@@ -153,6 +154,20 @@ VITE_API_URL=http://localhost:8000
 ```
 
 ## API overview
+
+### Authentication
+
+```text
+POST /auth/register
+POST /auth/login
+GET  /auth/me
+POST /auth/logout
+```
+
+Registration accepts either an email address or an international phone number.
+Passwords are stored using salted PBKDF2 hashes, while the browser receives an
+HTTP-only session cookie. The portfolio demo does not send email or SMS
+verification messages.
 
 ### Compile natural language
 
