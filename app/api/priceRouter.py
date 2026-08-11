@@ -5,6 +5,7 @@ from app.schemas.poll import PollAccepted, PollRequest
 from app.services.provider import fetch_price_by_provider
 from app.services.yfinance_service import (
     CHART_RANGES,
+    CHART_INTERVALS,
     fetch_chart_yfinance,
     search_stocks_yfinance,
 )
@@ -28,14 +29,20 @@ async def search_stocks(q: str = Query(..., min_length=1, max_length=80)):
 async def get_stock_chart(
     symbol: str,
     chart_range: str = Query(default="3mo", alias="range"),
+    interval: str = Query(default="1d"),
 ):
     if chart_range not in CHART_RANGES:
         raise HTTPException(
             status_code=422,
             detail=f"range must be one of {sorted(CHART_RANGES)}",
         )
+    if interval not in CHART_INTERVALS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"interval must be one of {sorted(CHART_INTERVALS)}",
+        )
     try:
-        return await fetch_chart_yfinance(symbol.upper(), chart_range)
+        return await fetch_chart_yfinance(symbol.upper(), chart_range, interval)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 

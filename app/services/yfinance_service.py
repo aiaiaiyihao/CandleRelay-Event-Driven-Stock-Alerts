@@ -4,8 +4,13 @@ import asyncio
 
 
 CHART_RANGES = {"1mo", "3mo", "6mo", "1y"}
-CHART_POINT_LIMITS = {"1mo": 22, "3mo": 66, "6mo": 132, "1y": 252}
-CHART_HISTORY_PERIOD = "2y"
+CHART_INTERVALS = {
+    "1d": {"history_period": "2y", "points": {"1mo": 22, "3mo": 66, "6mo": 132, "1y": 252}},
+    "30m": {"history_period": "60d", "points": {"1mo": 286, "3mo": 780, "6mo": 780, "1y": 780}},
+    "60m": {"history_period": "730d", "points": {"1mo": 154, "3mo": 462, "6mo": 924, "1y": 1764}},
+    "1wk": {"history_period": "10y", "points": {"1mo": 4, "3mo": 13, "6mo": 26, "1y": 52}},
+    "1mo": {"history_period": "max", "points": {"1mo": 1, "3mo": 3, "6mo": 6, "1y": 12}},
+}
 MARKET_INDEXES = {
     "^GSPC": "S&P 500",
     "^IXIC": "Nasdaq Composite",
@@ -67,14 +72,18 @@ async def search_stocks_yfinance(query: str, limit: int = 6) -> list[dict]:
     ][:limit]
 
 
-async def fetch_chart_yfinance(symbol: str, chart_range: str) -> dict:
+async def fetch_chart_yfinance(symbol: str, chart_range: str, chart_interval: str = "1d") -> dict:
     if chart_range not in CHART_RANGES:
         raise ValueError(f"Unsupported chart range: {chart_range}")
+    if chart_interval not in CHART_INTERVALS:
+        raise ValueError(f"Unsupported chart interval: {chart_interval}")
+
+    interval_config = CHART_INTERVALS[chart_interval]
 
     def load_history():
         return yf.Ticker(symbol).history(
-            period=CHART_HISTORY_PERIOD,
-            interval="1d",
+            period=interval_config["history_period"],
+            interval=chart_interval,
             auto_adjust=False,
         )
 
@@ -86,11 +95,11 @@ async def fetch_chart_yfinance(symbol: str, chart_range: str) -> dict:
         raise ValueError(f"No chart data found for symbol: {symbol}")
 
     points = build_chart_points(history)
-    points = points[-CHART_POINT_LIMITS[chart_range]:]
+    points = points[-interval_config["points"][chart_range]:]
     return {
         "symbol": symbol.upper(),
         "range": chart_range,
-        "interval": "1d",
+        "interval": chart_interval,
         "points": points,
     }
 

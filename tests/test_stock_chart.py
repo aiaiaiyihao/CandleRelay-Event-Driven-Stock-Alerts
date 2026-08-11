@@ -1,6 +1,6 @@
 import pandas as pd
 
-from app.services.yfinance_service import build_chart_points, moving_average
+from app.services.yfinance_service import CHART_INTERVALS, build_chart_points, moving_average
 
 
 def test_moving_average_waits_for_complete_window():
@@ -37,3 +37,10 @@ def test_chart_averages_are_calculated_before_display_range_is_trimmed():
     assert displayed[0]["sma_20"] is not None
     assert displayed[0]["sma_50"] is not None
     assert displayed[0]["sma_200"] is not None
+
+
+def test_chart_supports_intraday_weekly_and_monthly_intervals():
+    assert set(CHART_INTERVALS) == {"1d", "30m", "60m", "1wk", "1mo"}
+    assert CHART_INTERVALS["30m"]["history_period"] == "60d"
+    assert CHART_INTERVALS["1wk"]["history_period"] == "10y"
+    assert CHART_INTERVALS["1mo"]["history_period"] == "max"
