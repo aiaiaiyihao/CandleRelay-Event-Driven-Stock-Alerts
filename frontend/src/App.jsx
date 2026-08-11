@@ -126,6 +126,33 @@ function MoverList({ title, items, tone, page, setPage, selectedSymbol, selectSy
 }
 
 function MarketChart({ symbol, displayName, period, setPeriod, data, message, averages, setAverages, compact = false }) {
+  const [zoomLevel, setZoomLevel] = useState(0)
+  const [yStretch, setYStretch] = useState(0)
+  const zoomRatios = [1, 0.75, 0.5, 0.25, 0.125]
+  const yPaddingRatios = [0.3, 0.16, 0.07, 0.02]
+  const visibleCount = Math.max(10, Math.ceil(data.length * zoomRatios[zoomLevel]))
+  const visibleData = useMemo(() => data.slice(-visibleCount), [data, visibleCount])
+  const yDomain = useMemo(() => {
+    const keys = ['close', ...Object.keys(averages).filter((key) => averages[key])]
+    const values = visibleData.flatMap((point) => keys.map((key) => point[key]).filter((value) => Number.isFinite(value)))
+    if (!values.length) return ['auto', 'auto']
+    const minimum = Math.min(...values)
+    const maximum = Math.max(...values)
+    const range = Math.max(maximum - minimum, Math.abs(maximum) * 0.01, 1)
+    const padding = range * yPaddingRatios[yStretch]
+    return [minimum - padding, maximum + padding]
+  }, [visibleData, averages, yStretch])
+
+  useEffect(() => {
+    setZoomLevel(0)
+    setYStretch(0)
+  }, [symbol, period])
+
+  function resetChartView() {
+    setZoomLevel(0)
+    setYStretch(0)
+  }
+
   return (
     <section className={`stock-chart-panel panel ${compact ? 'compact-chart' : ''}`} id={compact ? 'dashboard-chart' : 'stock-chart'}>
       <div className="chart-header">
@@ -137,15 +164,24 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
           <div className="average-switcher" aria-label="Moving averages">
             {[['sma_20', 'SMA 20'], ['sma_50', 'SMA 50'], ['sma_200', 'SMA 200']].map(([key, label]) => <button className={averages[key] ? `active ${key}` : ''} key={key} onClick={() => setAverages((values) => ({ ...values, [key]: !values[key] }))}><i />{label}</button>)}
           </div>
+          <div className="chart-view-controls" aria-label="Chart zoom controls">
+            <span>X {Math.round(1 / zoomRatios[zoomLevel] * 10) / 10}×</span>
+            <button disabled={zoomLevel === 0} onClick={() => setZoomLevel((value) => Math.max(0, value - 1))} aria-label="Zoom chart out">−</button>
+            <button disabled={zoomLevel === zoomRatios.length - 1} onClick={() => setZoomLevel((value) => Math.min(zoomRatios.length - 1, value + 1))} aria-label="Zoom chart in">+</button>
+            <span>Y {yStretch + 1}×</span>
+            <button disabled={yStretch === 0} onClick={() => setYStretch((value) => Math.max(0, value - 1))} aria-label="Compress price axis">−</button>
+            <button disabled={yStretch === yPaddingRatios.length - 1} onClick={() => setYStretch((value) => Math.min(yPaddingRatios.length - 1, value + 1))} aria-label="Stretch price axis">+</button>
+            <button className="chart-reset" onClick={resetChartView}>RESET</button>
+          </div>
           <span className="period-info">{CHART_PERIOD_INFO[period]}</span>
         </div>
       </div>
-      <div className="interactive-chart">
-        {data.length ? <ResponsiveContainer width="100%" height="100%"><ComposedChart data={data} margin={{ top: 16, right: 14, bottom: 4, left: 0 }}>
+      <div className="interactive-chart" onWheel={(event) => { if (!event.ctrlKey && !event.metaKey) return; event.preventDefault(); setZoomLevel((value) => Math.max(0, Math.min(zoomRatios.length - 1, value + (event.deltaY < 0 ? 1 : -1)))) }}>
+        {visibleData.length ? <ResponsiveContainer width="100%" height="100%"><ComposedChart data={visibleData} margin={{ top: 16, right: 14, bottom: 4, left: 0 }}>
           <defs><linearGradient id={compact ? 'dashboardPriceFill' : 'favoritePriceFill'} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e76d2d" stopOpacity={0.28} /><stop offset="100%" stopColor="#e76d2d" stopOpacity={0} /></linearGradient></defs>
           <CartesianGrid stroke="#252728" vertical={false} />
           <XAxis dataKey="date" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} minTickGap={34} />
-          <YAxis domain={['auto', 'auto']} orientation="right" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} width={52} tickFormatter={(value) => `$${Number(value).toFixed(0)}`} />
+          <YAxis domain={yDomain} allowDataOverflow={false} orientation="right" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} width={52} tickFormatter={(value) => `$${Number(value).toFixed(0)}`} />
           <Tooltip content={<ChartTooltip />} />
           <Area type="monotone" dataKey="close" name="Price" stroke="#e9e7e1" strokeWidth={2} fill={`url(#${compact ? 'dashboardPriceFill' : 'favoritePriceFill'})`} dot={false} />
           {averages.sma_20 && <Line type="monotone" dataKey="sma_20" name="SMA 20" stroke="#e76d2d" strokeWidth={1.5} dot={false} />}
