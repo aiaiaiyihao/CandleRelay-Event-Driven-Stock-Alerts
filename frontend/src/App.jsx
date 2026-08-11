@@ -35,15 +35,6 @@ const SAMPLE_DEFINITION = {
   cooldown_seconds: 3600,
 }
 
-const SAMPLE_BACKTEST = {
-  bars_processed: 22,
-  trigger_count: 1,
-  result_summary: {
-    triggers: [{ evaluated_at: '2026-07-22T20:00:00+00:00', entry_price: '120.00000000' }],
-    average_forward_returns: { 1: '0.047', 5: '0.118', 20: '0.214' },
-  },
-}
-
 function Metric({ label, value, tone }) {
   return (
     <div className="metric">
@@ -245,8 +236,12 @@ function App() {
   const [definition, setDefinition] = useState(SAMPLE_DEFINITION)
   const [warning, setWarning] = useState('No timeframe specified - defaulted to daily bars')
   const [ruleId, setRuleId] = useState('')
-  const [backtest, setBacktest] = useState(SAMPLE_BACKTEST)
+  const [backtest, setBacktest] = useState(null)
+  const [backtestStart, setBacktestStart] = useState('2026-07-01')
+  const [backtestEnd, setBacktestEnd] = useState('2026-08-11')
   const [alerts, setAlerts] = useState([])
+  const [recentTriggers, setRecentTriggers] = useState([])
+  const [triggerIndex, setTriggerIndex] = useState(0)
   const [rules, setRules] = useState([])
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [tracked, setTracked] = useState([])
@@ -289,12 +284,17 @@ function App() {
   useEffect(() => {
     if (!user) {
       setAlerts([])
+      setRecentTriggers([])
       setRules([])
       setNotificationsOpen(false)
       return undefined
     }
     let active = true
-    const loadAlerts = () => api.alerts().then((items) => active && setAlerts(items)).catch(() => {})
+    const loadAlerts = () => Promise.all([api.alerts(), api.allAlerts()]).then(([unread, all]) => {
+      if (!active) return
+      setAlerts(unread)
+      setRecentTriggers(all)
+    }).catch(() => {})
     loadAlerts()
     api.rules().then((items) => active && setRules(items)).catch(() => {})
     const interval = window.setInterval(loadAlerts, 30_000)
@@ -418,6 +418,8 @@ function App() {
   }, [search, suggestionsOpen])
 
   const returns = useMemo(() => backtest?.result_summary?.average_forward_returns || {}, [backtest])
+  const selectedRule = useMemo(() => rules.find((rule) => rule.id === ruleId) || null, [rules, ruleId])
+  const currentTrigger = recentTriggers[triggerIndex] || null
   const marketBySymbol = useMemo(() => (
     [...market.indexes, ...market.gainers, ...market.losers, ...favoriteQuotes].reduce((items, item) => {
       const previous = items[item.symbol]
@@ -453,6 +455,14 @@ function App() {
   useEffect(() => {
     setFavoriteNewsPage((current) => Math.min(current, favoriteNewsPageCount - 1))
   }, [favoriteNewsPageCount])
+
+  useEffect(() => {
+    if (!ruleId && rules.length) setRuleId(rules[0].id)
+  }, [rules, ruleId])
+
+  useEffect(() => {
+    setTriggerIndex((current) => Math.min(current, Math.max(0, recentTriggers.length - 1)))
+  }, [recentTriggers.length])
 
   async function refreshMarket() {
     setBusy('market-refresh')
@@ -568,8 +578,9 @@ function App() {
       return
     }
     setBusy('backtest')
+    setBacktest(null)
     try {
-      const result = await api.runBacktest(ruleId, '2026-07-01T00:00:00Z', '2026-07-23T00:00:00Z')
+      const result = await api.runBacktest(ruleId, `${backtestStart}T00:00:00Z`, `${backtestEnd}T23:59:59Z`)
       setBacktest(result)
       setMessage(`Backtest completed - ${result.trigger_count} signal found`)
     } catch (error) {
@@ -884,32 +895,19 @@ function App() {
             <div><span className="step">04</span><h2>Historical replay</h2></div>
             <button className="run" onClick={runBacktest} disabled={Boolean(busy)}>{busy === 'backtest' ? 'Running…' : 'Run backtest ↗'}</button>
           </div>
+          <div className="replay-config"><label>RULE<select value={ruleId} onChange={(event) => { setRuleId(event.target.value); setBacktest(null) }} disabled={!rules.length}>{rules.length ? rules.map((rule) => <option key={rule.id} value={rule.id}>{rule.name} · {rule.definition.symbol}</option>) : <option value="">No active rule</option>}</select></label><label>FROM<input type="date" value={backtestStart} onChange={(event) => setBacktestStart(event.target.value)} /></label><label>TO<input type="date" value={backtestEnd} onChange={(event) => setBacktestEnd(event.target.value)} /></label><p>{selectedRule ? `Replaying stored ${selectedRule.definition.timeframe.toUpperCase()} bars for ${selectedRule.definition.symbol} through rule v${selectedRule.version}.` : 'Select or activate a rule to replay stored market bars.'}</p></div>
           <div className="metrics-row">
-            <Metric label="BARS PROCESSED" value={backtest.bars_processed} />
-            <Metric label="SIGNALS FOUND" value={backtest.trigger_count} tone="orange" />
+            <Metric label="BARS PROCESSED" value={backtest?.bars_processed ?? '—'} />
+            <Metric label="SIGNALS FOUND" value={backtest?.trigger_count ?? '—'} tone="orange" />
             <Metric label="20-BAR RETURN" value={returns['20'] ? `+${(Number(returns['20']) * 100).toFixed(1)}%` : '—'} tone="green" />
           </div>
-          <div className="chart" aria-label="Sample NVDA price chart">
-            <div className="grid-line one" /><div className="grid-line two" /><div className="grid-line three" />
-            <svg viewBox="0 0 800 180" preserveAspectRatio="none" role="img" aria-label="Price line dropping through moving average">
-              <polyline className="sma-line" points="0,126 80,120 160,112 240,104 320,96 400,88 480,80 560,72 640,66 720,61 800,56" />
-              <polyline className="price-line" points="0,142 80,126 160,132 240,104 320,112 400,79 480,91 560,53 640,65 700,42 750,48 800,146" />
-              <circle cx="800" cy="146" r="7" />
-            </svg>
-            <span className="signal-label">SIGNAL - JUL 22</span>
-          </div>
+          <div className="replay-events">{backtest ? (backtest.result_summary?.triggers?.length ? backtest.result_summary.triggers.map((trigger, index) => <article key={`${trigger.evaluated_at}-${index}`}><span>{String(index + 1).padStart(2, '0')}</span><strong>{new Date(trigger.evaluated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</strong><em>ENTRY ${Number(trigger.entry_price).toFixed(2)}</em><b>{trigger.forward_returns?.['20'] ? `${Number(trigger.forward_returns['20']) >= 0 ? '+' : ''}${(Number(trigger.forward_returns['20']) * 100).toFixed(2)}% / 20 BARS` : 'FORWARD RETURN UNAVAILABLE'}</b></article>) : <div>REPLAY COMPLETED · NO TRIGGERS IN THIS RANGE</div>) : <div>RUN A BACKTEST TO SEE REAL TRIGGER EVENTS</div>}</div>
         </article>
 
         <aside className="panel alert-card">
-          <div className="panel-heading"><div><span className="step">05</span><h2>Live alerts</h2></div><span className="count">{alerts.length || 1}</span></div>
-          {(alerts.length ? alerts : [{ id: 'demo', symbol: 'NVDA', market_timestamp: '2026-07-22T20:00:00Z', rule_version: 1 }]).map((alert) => (
-            <div className="alert" key={alert.id}>
-              <div className="alert-top"><span className="pulse" /><strong>{alert.symbol}</strong><time>{new Date(alert.market_timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>
-              <h3>High-volume breakdown</h3>
-              <p>Price crossed below SMA20 while volume exceeded the 20-day average by 2×.</p>
-              <div><span>RULE v{alert.rule_version}</span>{alert.id !== 'demo' && <button onClick={() => api.acknowledge(alert.id).then(() => setAlerts((items) => items.filter((item) => item.id !== alert.id)))}>Acknowledge</button>}</div>
-            </div>
-          ))}
+          <div className="panel-heading"><div><span className="step">05</span><h2>Recent Triggers</h2></div><span className="count">{recentTriggers.length}</span></div>
+          {currentTrigger ? <div className="trigger-view"><div className="alert-top"><span className="pulse" /><strong>{currentTrigger.symbol}</strong><time>{new Date(currentTrigger.market_timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time></div><h3>{rules.find((rule) => rule.id === currentTrigger.rule_id)?.name || `${currentTrigger.symbol} alert`}</h3><p>{currentTrigger.explanation?.conditions?.map((condition) => condition.reason).filter(Boolean).join(' · ') || 'The stored rule conditions evaluated to true.'}</p><div className="trigger-meta"><span>RULE v{currentTrigger.rule_version} · {currentTrigger.timeframe.toUpperCase()}</span><b>{currentTrigger.acknowledged ? 'READ' : 'UNREAD'}</b></div></div> : <div className="trigger-empty">NO RULE TRIGGERS YET</div>}
+          <div className="trigger-pagination"><button disabled={triggerIndex === 0} onClick={() => setTriggerIndex((value) => value - 1)}>← NEWER</button><span>{recentTriggers.length ? `${triggerIndex + 1} / ${recentTriggers.length}` : '0 / 0'}</span><button disabled={triggerIndex >= recentTriggers.length - 1} onClick={() => setTriggerIndex((value) => value + 1)}>OLDER →</button></div>
           <div className="event-route"><span>KAFKA</span><b>→</b><span>ENGINE</span><b>→</b><span>ALERT</span></div>
         </aside>
       </section>
