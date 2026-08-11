@@ -39,6 +39,8 @@ produce identical results. This behavior is covered by automated tests.
 - Persistent tracked-symbol watchlist with live ticker lookup
 - Interactive 1M/3M/6M/1Y price charts with SMA20, SMA50, and SMA200 overlays
 - Email or phone registration with password hashing and server-side sessions
+- User-owned Favorites with live price, daily change, and sorting
+- US market dashboard with major indexes and daily Top 10 movers
 
 ## Example rule
 
@@ -124,16 +126,16 @@ CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 
 ## React dashboard
 
-The dashboard is intentionally centered on the project's differentiating flow:
+The dashboard combines market discovery with the project's differentiating rule workflow:
 
-1. Write a market rule in natural language.
-2. Search an exact ticker and add it to the persistent watchlist.
-3. Select a tracked symbol and inspect its chart across multiple time ranges.
-4. Toggle common moving averages to compare trend structure.
-5. Compile the text into a validated and explainable Rule DSL.
-6. Review and activate the versioned rule.
-7. Replay stored market bars and inspect forward returns.
-8. View and acknowledge alerts produced by the live Kafka worker.
+1. Review S&P 500, Nasdaq, Dow Jones, and Russell 2000 performance.
+2. Select a major index or a Top 10 gainer/loser to inspect its chart.
+3. Switch chart ranges and toggle common moving averages.
+4. Sign in and save stocks to a private, sortable Favorites list.
+5. Write a market rule in natural language.
+6. Compile the text into a validated and explainable Rule DSL.
+7. Review, activate, and replay the versioned rule.
+8. View alerts produced by the live Kafka worker.
 
 The UI uses realistic sample content on first render so the project remains
 presentable before the local services are started. Actions use the real FastAPI
@@ -210,6 +212,21 @@ The dashboard uses exact ticker lookup for the latest yfinance quote. Tracked
 symbols are stored in PostgreSQL and remain available after a page refresh.
 Selecting a tracked symbol loads daily OHLCV history for `1mo`, `3mo`, `6mo`,
 or `1y`, including server-calculated SMA20, SMA50, and SMA200 series.
+
+### Market dashboard and Favorites
+
+```text
+GET    /market/overview
+GET    /market/quotes?symbols=AAPL,NVDA
+GET    /favorites
+POST   /favorites
+DELETE /favorites/{symbol}
+```
+
+The overview batches a curated US large-cap universe to calculate the daily
+Top 10 gainers and losers without requiring a paid market-screener feed.
+Favorites are keyed by authenticated user and symbol, so accounts never share
+saved stocks.
 
 ### Backtests
 
