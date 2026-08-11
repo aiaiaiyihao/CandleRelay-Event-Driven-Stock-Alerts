@@ -37,6 +37,7 @@ produce identical results. This behavior is covered by automated tests.
 - Alembic-managed database schema
 - Responsive React rule, backtest, and alert dashboard
 - Persistent tracked-symbol watchlist with live ticker lookup
+- Interactive 1M/3M/6M/1Y price charts with SMA20, SMA50, and SMA200 overlays
 
 ## Example rule
 
@@ -126,10 +127,12 @@ The dashboard is intentionally centered on the project's differentiating flow:
 
 1. Write a market rule in natural language.
 2. Search an exact ticker and add it to the persistent watchlist.
-3. Compile the text into a validated and explainable Rule DSL.
-4. Review and activate the versioned rule.
-5. Replay stored market bars and inspect forward returns.
-6. View and acknowledge alerts produced by the live Kafka worker.
+3. Select a tracked symbol and inspect its chart across multiple time ranges.
+4. Toggle common moving averages to compare trend structure.
+5. Compile the text into a validated and explainable Rule DSL.
+6. Review and activate the versioned rule.
+7. Replay stored market bars and inspect forward returns.
+8. View and acknowledge alerts produced by the live Kafka worker.
 
 The UI uses realistic sample content on first render so the project remains
 presentable before the local services are started. Actions use the real FastAPI
@@ -182,6 +185,7 @@ PATCH /rules/{rule_id}/status
 
 ```text
 GET    /prices/latest?symbol=NVDA
+GET    /stocks/NVDA/chart?range=3mo
 GET    /watchlist
 POST   /watchlist
 DELETE /watchlist/{symbol}
@@ -189,6 +193,8 @@ DELETE /watchlist/{symbol}
 
 The dashboard uses exact ticker lookup for the latest yfinance quote. Tracked
 symbols are stored in PostgreSQL and remain available after a page refresh.
+Selecting a tracked symbol loads daily OHLCV history for `1mo`, `3mo`, `6mo`,
+or `1y`, including server-calculated SMA20, SMA50, and SMA200 series.
 
 ### Backtests
 
