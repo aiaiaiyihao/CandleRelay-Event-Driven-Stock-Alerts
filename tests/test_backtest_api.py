@@ -92,6 +92,12 @@ def test_runs_and_persists_explainable_backtest():
     assert body["bars_processed"] == 3
     assert body["trigger_count"] == 1
     assert body["result_summary"]["triggers"][0]["conditions"][0]["left_value"] == "80"
+    assert body["result_summary"]["triggers"][0]["entry_price"] == "80"
+    assert body["result_summary"]["average_forward_returns"] == {
+        "1": None,
+        "5": None,
+        "20": None,
+    }
 
     fetched = client.get(f"/backtests/{body['id']}")
     assert fetched.status_code == 200

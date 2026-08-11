@@ -53,7 +53,12 @@ def execute_backtest(request: BacktestCreate, session: Session) -> BacktestRespo
         run.result_summary = {
             "triggers": [
                 {
-                    "evaluated_at": trigger.evaluated_at.isoformat(),
+                    "evaluated_at": outcome.evaluation.evaluated_at.isoformat(),
+                    "entry_price": _json_number(outcome.entry_price),
+                    "forward_returns": {
+                        str(horizon): _json_number(value)
+                        for horizon, value in outcome.forward_returns.items()
+                    },
                     "conditions": [
                         {
                             "matched": condition.matched,
@@ -62,11 +67,15 @@ def execute_backtest(request: BacktestCreate, session: Session) -> BacktestRespo
                             "right_value": _json_number(condition.right_value),
                             "reason": condition.reason,
                         }
-                        for condition in trigger.conditions
+                        for condition in outcome.evaluation.conditions
                     ],
                 }
-                for trigger in result.triggers
-            ]
+                for outcome in result.outcomes
+            ],
+            "average_forward_returns": {
+                str(horizon): _json_number(value)
+                for horizon, value in result.average_forward_returns.items()
+            },
         }
         run.completed_at = datetime.now(timezone.utc)
         session.commit()
@@ -116,4 +125,3 @@ def _to_response(run: BacktestRun) -> BacktestResponse:
         created_at=run.created_at,
         completed_at=run.completed_at,
     )
-
