@@ -132,7 +132,13 @@ REDIS_URL=redis://localhost:6379/0
 KAFKA_BOOTSTRAP=localhost:9092
 KAFKA_SIGNAL_GROUP=crandleRelay-live-rules
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+ALPHA_VANTAGE_API_KEY=optional_api_key_for_market_movers_fallback
 ```
+
+The dashboard retries transient yfinance screener failures and serves the last
+successful Redis snapshot when upstream data is unavailable. If
+`ALPHA_VANTAGE_API_KEY` is configured, Alpha Vantage Top 20 gainers and losers
+are used before the stale-cache fallback.
 
 ## React application
 
