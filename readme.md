@@ -82,7 +82,8 @@ docker compose -f docker/docker-compose.yml up -d
 
 This starts PostgreSQL, Redis, Kafka, the API, the live rule worker, and the
 React frontend. The API container applies Alembic migrations before serving
-traffic.
+traffic. SignalForge uses its own `signalforge_pgdata` volume so older local
+PostgreSQL projects do not interfere with the demo credentials.
 
 Open:
 
