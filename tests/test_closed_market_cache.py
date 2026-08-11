@@ -4,7 +4,11 @@ from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
 
 from app.services import yfinance_service
-from app.services.yfinance_service import fetch_market_overview, seconds_until_next_us_market_open
+from app.services.yfinance_service import (
+    fetch_market_overview,
+    fetch_stock_detail_yfinance,
+    seconds_until_next_us_market_open,
+)
 
 
 NEW_YORK = ZoneInfo("America/New_York")
@@ -35,3 +39,20 @@ def test_market_overview_returns_closed_snapshot_before_upstream_call():
     assert result == snapshot
     indexes.assert_not_awaited()
     movers.assert_not_awaited()
+
+
+def test_stock_detail_returns_closed_snapshot_even_when_refresh_is_requested():
+    snapshot = {
+        "symbol": "NVDA", "name": "NVIDIA Corporation", "price": 180.0,
+        "market_state": "CLOSED", "updated_at": "2026-08-14T20:00:00+00:00",
+    }
+    with (
+        patch("app.services.yfinance_service.get_cached_json", new=AsyncMock(return_value=snapshot)),
+        patch("app.services.yfinance_service.fetch_stock_news_yfinance", new=AsyncMock(return_value=[])),
+        patch("app.services.yfinance_service.asyncio.to_thread", new=AsyncMock()) as upstream,
+    ):
+        result = asyncio.run(fetch_stock_detail_yfinance("NVDA", force_refresh=True))
+
+    assert result["name"] == "NVIDIA Corporation"
+    assert result["news"] == []
+    upstream.assert_not_awaited()

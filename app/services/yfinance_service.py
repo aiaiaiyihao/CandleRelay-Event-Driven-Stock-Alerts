@@ -117,6 +117,10 @@ async def search_stocks_yfinance(query: str, limit: int = 6) -> list[dict]:
 
 async def fetch_stock_detail_yfinance(symbol: str, force_refresh: bool = False) -> dict:
     cache_key = f"candlerelay:stock-detail:{symbol.upper()}"
+    closed_cache_key = f"candlerelay:stock-detail:closed:{symbol.upper()}"
+    closed_snapshot = await get_cached_json(closed_cache_key)
+    if closed_snapshot is not None:
+        return {**closed_snapshot, "news": await fetch_stock_news_yfinance(symbol)}
     if not force_refresh:
         cached = await get_cached_json(cache_key)
         if cached is not None:
@@ -157,6 +161,12 @@ async def fetch_stock_detail_yfinance(symbol: str, force_refresh: bool = False) 
         "updated_at": datetime.fromtimestamp(timestamp, tz=timezone.utc) if timestamp else datetime.now(timezone.utc),
     }
     await set_cached_json(cache_key, detail, ttl_seconds=60)
+    if detail["market_state"] != "REGULAR":
+        await set_cached_json(
+            closed_cache_key,
+            detail,
+            ttl_seconds=seconds_until_next_us_market_open(),
+        )
     return {**detail, "news": await fetch_stock_news_yfinance(symbol, force_refresh=force_refresh)}
 
 
