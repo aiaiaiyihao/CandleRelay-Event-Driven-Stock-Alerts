@@ -116,8 +116,12 @@ function formatChartTimestamp(timestamp, interval, full = false) {
   })
 }
 
-function formatChartAxisTimestamp(timestamp, interval, sameTradingDay = false) {
+function formatChartAxisTimestamp(timestamp, interval, period) {
   const value = new Date(timestamp)
+  if (period === '1wk') return value.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
+  if (period === '1mo' || period === '3mo') return value.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  if (period === '1y') return value.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()
+  if (period === '5y' || period === 'max') return value.toLocaleDateString('en-US', { year: 'numeric' })
   if (INTRADAY_INTERVALS.has(interval)) {
     return value.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
   }
@@ -166,20 +170,20 @@ function Candlestick({ x, width, payload, background, domain, isActive }) {
 }
 
 function MoverList({ title, items, tone, page, setPage, selectedSymbol, selectSymbol, previewSymbol, cancelPreview, tracked, trackSymbol, untrackSymbol }) {
-  const pageSize = 10
+  const pageSize = 15
   const pageCount = Math.max(1, Math.ceil(items.length / pageSize))
   const safePage = Math.min(page, pageCount - 1)
   const visibleItems = items.slice(safePage * pageSize, (safePage + 1) * pageSize)
   return (
     <div className="mover-list">
-      <h3>{title}<span>TOP 50 · 10 / PAGE</span></h3>
+      <h3>{title}<span>TOP 50 · 15 / PAGE</span></h3>
       {visibleItems.map((item, index) => <div className={`mover-row ${selectedSymbol === item.symbol ? 'selected' : ''}`} key={item.symbol} onMouseEnter={() => previewSymbol(item.symbol)} onMouseLeave={cancelPreview} onClick={() => { cancelPreview(); selectSymbol(item.symbol) }} role="button" tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && selectSymbol(item.symbol)}><span>{String((safePage * pageSize) + index + 1).padStart(2, '0')}</span><strong>{item.symbol}</strong><em>${item.price.toFixed(2)}</em><b className={tone}>{item.change_percent >= 0 ? '+' : ''}{item.change_percent.toFixed(2)}%</b><button className={tracked.some((favorite) => favorite.symbol === item.symbol) ? 'star active' : 'star'} onClick={(event) => { event.stopPropagation(); cancelPreview(); tracked.some((favorite) => favorite.symbol === item.symbol) ? untrackSymbol(item.symbol) : trackSymbol(item.symbol) }} aria-label={`Toggle ${item.symbol} favorite`}>★</button></div>)}
       <div className="mover-pagination"><button disabled={safePage === 0} onClick={() => setPage(safePage - 1)} aria-label={`Previous ${title.toLowerCase()} page`}>←</button><span>{safePage + 1} / {pageCount}</span><button disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)} aria-label={`Next ${title.toLowerCase()} page`}>→</button></div>
     </div>
   )
 }
 
-function MarketChart({ symbol, displayName, period, setPeriod, data, message, averages, setAverages, compact = false, emphasizeTicker = false }) {
+function MarketChart({ symbol, displayName, period, setPeriod, data, message, averages, setAverages, compact = false, emphasizeTicker = false, quote = null }) {
   const [chartMode, setChartMode] = useState('line')
   const [zoomLevel, setZoomLevel] = useState(0)
   const [yStretch, setYStretch] = useState(0)
@@ -244,7 +248,7 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
   return (
     <section className={`stock-chart-panel panel ${compact ? 'compact-chart' : ''}`} id={compact ? 'dashboard-chart' : 'stock-chart'}>
       <div className="chart-header">
-        <div className={`chart-symbol ${emphasizeTicker ? 'ticker-emphasis' : ''}`}><span>SELECTED MARKET</span><h2>{emphasizeTicker ? symbol : displayName || symbol}</h2>{displayName && displayName !== symbol && <p>{emphasizeTicker ? displayName : symbol}</p>}</div>
+        <div className={`chart-symbol ${compact || emphasizeTicker ? 'ticker-emphasis' : ''}`}><span>SELECTED MARKET</span><h2>{compact || emphasizeTicker ? symbol : displayName || symbol}</h2>{displayName && displayName !== symbol && <p>{compact || emphasizeTicker ? displayName : symbol}</p>}{compact && quote && <div className="chart-quote"><strong>${Number(quote.price).toFixed(2)}</strong><em className={quote.change_percent >= 0 ? 'up' : 'down'}>{quote.change_percent >= 0 ? '+' : ''}{quote.change_percent.toFixed(2)}%</em></div>}</div>
         <div className="chart-controls">
           <div className="chart-mode-switcher" aria-label="Chart type">
             <button className={chartMode === 'line' ? 'active' : ''} onClick={() => setChartMode('line')}>LINE</button>
@@ -484,7 +488,7 @@ function App() {
         setChartData(result.points.map((point) => ({
           ...point,
           date: formatChartTimestamp(point.timestamp, result.interval),
-          axisDate: formatChartAxisTimestamp(point.timestamp, result.interval),
+          axisDate: formatChartAxisTimestamp(point.timestamp, result.interval, chartPeriod),
           tooltipDate: formatChartTimestamp(point.timestamp, result.interval, true),
         })))
         setChartMessage('')
@@ -888,7 +892,7 @@ function App() {
               <MoverList title="TOP LOSERS" items={market.losers} tone="down" page={moverPages.losers} setPage={(nextPage) => setMoverPages((pages) => ({ ...pages, losers: nextPage }))} selectedSymbol={selectedSymbol} selectSymbol={navigateStock} previewSymbol={previewSymbolLater} cancelPreview={cancelSymbolPreview} tracked={tracked} trackSymbol={trackSymbol} untrackSymbol={untrackSymbol} />
             </div>
           </div>
-          <MarketChart symbol={selectedSymbol} displayName={marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
+          <MarketChart symbol={selectedSymbol} displayName={marketBySymbol[selectedSymbol]?.name} quote={marketBySymbol[selectedSymbol]} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
         </div>
         <section className="sector-panel panel">
           <div className="sector-heading"><div><p className="eyebrow">SECTOR ETF PROXY</p><h3>Sector performance</h3></div><span>RANKED HIGH TO LOW · CLICK TO EXPLORE</span></div>
