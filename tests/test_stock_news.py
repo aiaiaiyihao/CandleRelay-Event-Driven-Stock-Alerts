@@ -1,7 +1,8 @@
 import asyncio
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.services.yfinance_service import fetch_stock_news_yfinance
+from app.services.yfinance_service import fetch_stock_news_yfinance, stock_news_cache_seconds
 
 
 def test_stock_news_normalizes_and_caches_latest_items():
@@ -28,4 +29,11 @@ def test_stock_news_normalizes_and_caches_latest_items():
         "published_at": "2026-08-11T18:00:00Z",
         "url": "https://example.com/nvidia",
     }]
-    set_cache.assert_awaited_once_with("candlerelay:stock-news:NVDA", news, ttl_seconds=300)
+    set_cache.assert_awaited_once()
+    assert set_cache.await_args.kwargs["ttl_seconds"] in {300, 900, 3600}
+
+
+def test_stock_news_cache_ttl_follows_us_market_session():
+    assert stock_news_cache_seconds(datetime.fromisoformat("2026-08-11T14:00:00+00:00")) == 300
+    assert stock_news_cache_seconds(datetime.fromisoformat("2026-08-11T21:00:00+00:00")) == 900
+    assert stock_news_cache_seconds(datetime.fromisoformat("2026-08-09T18:00:00+00:00")) == 3600

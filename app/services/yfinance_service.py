@@ -69,6 +69,15 @@ def seconds_until_next_us_market_open(now: datetime | None = None) -> int:
     candidate = datetime.combine(candidate_date, datetime_time(9, 30), tzinfo=US_MARKET_TIMEZONE)
     return max(60, int((candidate - current).total_seconds()))
 
+
+def stock_news_cache_seconds(now: datetime | None = None) -> int:
+    current = (now or datetime.now(timezone.utc)).astimezone(US_MARKET_TIMEZONE)
+    if current.weekday() >= 5:
+        return 3_600
+    if datetime_time(9, 30) <= current.time() < datetime_time(16, 0):
+        return 300
+    return 900
+
 #call remote api to fetch price
 async def fetch_price_yfinance(symbol: str):
     try:
@@ -210,7 +219,7 @@ async def fetch_stock_news_yfinance(symbol: str, force_refresh: bool = False) ->
         if len(news) == 5:
             break
 
-    await set_cached_json(cache_key, news, ttl_seconds=300)
+    await set_cached_json(cache_key, news, ttl_seconds=stock_news_cache_seconds())
     return news
 
 
