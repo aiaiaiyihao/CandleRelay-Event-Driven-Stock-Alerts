@@ -62,6 +62,15 @@ def test_chart_presets_use_requested_points_for_each_range():
     assert CHART_PRESETS["max"]["points"] is None
 
 
+def test_chart_presets_fetch_warmup_sessions_before_clipping_display_points():
+    assert CHART_PRESETS["1d"]["history_period"] == "5d"
+    assert CHART_PRESETS["1wk"]["history_period"] == "60d"
+    assert CHART_PRESETS["3mo"]["history_period"] == "2y"
+    assert CHART_PRESETS["1y"]["history_period"] == "5y"
+    assert CHART_PRESETS["1d"]["points"] == 78
+    assert CHART_PRESETS["3mo"]["points"] == 66
+
+
 def test_chart_history_aggregates_ohlcv_without_averaging_prices():
     dates = pd.date_range("2025-01-02 09:30", periods=4, freq="5min", tz="America/New_York")
     history = pd.DataFrame(
