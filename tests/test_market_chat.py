@@ -81,6 +81,27 @@ def test_market_chat_skips_question_words_when_extracting_a_ticker():
     fetch_detail.assert_awaited_once_with("SE")
 
 
+def test_market_chat_resolves_a_company_name_before_returning_its_overview():
+    detail = {
+        "symbol": "TSLA",
+        "name": "Tesla, Inc.",
+        "price": 340.0,
+        "change_percent": 1.5,
+        "updated_at": "2026-08-11T18:00:00Z",
+        "news": [{"title": "Tesla updates its vehicle lineup", "url": "https://example.com/tesla"}],
+    }
+    with (
+        patch("app.services.market_chat_service.search_stocks_yfinance", new=AsyncMock(return_value=[{"symbol": "TSLA", "name": "Tesla, Inc."}])) as search,
+        patch("app.services.market_chat_service.fetch_stock_detail_yfinance", new=AsyncMock(return_value=detail)),
+        patch("app.services.market_chat_service.summarize_stock_news_with_gemini", new=AsyncMock(return_value="• Tesla updated its vehicle lineup.")),
+    ):
+        response = client().post("/market/chat", json={"question": "How is Tesla today?"})
+    assert response.status_code == 200
+    assert response.json()["symbol"] == "TSLA"
+    assert "Tesla, Inc. (TSLA) is $340.00" in response.json()["answer"]
+    search.assert_awaited_once_with("Tesla", limit=1)
+
+
 def test_market_chat_returns_top_ten_gainers_and_losers_for_market_status_question():
     overview = {
         "gainers": [{"symbol": f"GAIN{index}", "price": 10.0 + index, "change_percent": 10.0 - index} for index in range(10)],

@@ -748,16 +748,14 @@ function App() {
   async function askMarket(question = chatQuestion) {
     const prompt = question.trim()
     if (!prompt || busy === 'market-chat') return
-    const ignoredTokens = new Set(['WHAT', 'WHICH', 'WHY', 'HOW', 'IS', 'ARE', 'SHOW', 'TELL', 'ME', 'ABOUT', 'THE', 'A', 'AN', 'FOR', 'OF', 'ON', 'IT', 'ITS', 'THIS', 'THAT', 'WITH', 'AND', 'TO', 'IN', 'STOCK', 'STOCKS', 'PRICE', 'TODAY', 'STRONG', 'STRONGEST', 'WEAK', 'WEAKEST'])
-    const explicitSymbol = (prompt.toUpperCase().match(/\b[A-Z]{1,5}(?:\.[A-Z])?\b/g) || []).find((token) => !ignoredTokens.has(token))
     const rankedMoverQuestion = /strongest|weakest|gainer|loser|market leaders|market laggards/i.test(prompt)
-    const contextSymbol = rankedMoverQuestion ? null : (explicitSymbol || chatContextSymbol || null)
+    const contextSymbol = rankedMoverQuestion ? null : (chatContextSymbol || null)
     setChatMessages((items) => [...items, { role: 'user', answer: prompt, sources: [] }])
     setChatQuestion('')
     setBusy('market-chat')
     try {
       const response = await api.marketChat(prompt, contextSymbol)
-      if (explicitSymbol) setChatContextSymbol(explicitSymbol)
+      if (response.symbol) setChatContextSymbol(response.symbol)
       setChatMessages((items) => [...items, { role: 'assistant', ...response }])
     } catch (error) {
       setChatMessages((items) => [...items, { role: 'assistant', answer: error.message, sources: [] }])

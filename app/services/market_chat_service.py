@@ -6,6 +6,7 @@ from app.services.yfinance_service import (
     fetch_market_overview,
     fetch_stock_detail_yfinance,
     fetch_stock_news_yfinance,
+    search_stocks_yfinance,
 )
 
 
@@ -16,6 +17,8 @@ IGNORED_TOKENS = {
 }
 RANKED_MOVER_TERMS = ("strongest", "weakest", "gainer", "gainers", "loser", "losers", "market leaders", "market laggards")
 MARKET_STATUS_TERMS = ("how is the market", "how's the market", "market overview", "market today", "market doing")
+COMPANY_LOOKUP_PREFIXES = ("how is", "how's", "what about", "tell me about", "status of", "news for", "price of", "quote for")
+COMPANY_QUERY_WORDS = IGNORED_TOKENS | {"STATUS", "NEWS", "HEADLINE", "HEADLINES", "LATEST", "UPDATE", "UPDATES", "MARKET", "DOING", "SOMETHING", "INTERESTING"}
 
 
 def _symbol(question: str) -> str | None:
@@ -23,6 +26,29 @@ def _symbol(question: str) -> str | None:
         if token not in IGNORED_TOKENS:
             return token
     return None
+
+
+def _company_query(question: str) -> str | None:
+    lowered = question.lower().strip()
+    words = re.findall(r"[A-Za-z][A-Za-z.&'-]*", question)
+    filtered = [word for word in words if word.upper() not in COMPANY_QUERY_WORDS]
+    if any(lowered.startswith(prefix) for prefix in COMPANY_LOOKUP_PREFIXES):
+        return " ".join(filtered) or None
+    return " ".join(filtered) if len(words) <= 2 and filtered else None
+
+
+async def _resolve_symbol(question: str) -> str | None:
+    explicit = _symbol(question)
+    if explicit:
+        return explicit
+    query = _company_query(question)
+    if not query:
+        return None
+    try:
+        results = await search_stocks_yfinance(query, limit=1)
+    except ValueError:
+        return None
+    return results[0]["symbol"] if results else None
 
 
 def _mover_line(item: dict, reason: str | None = None) -> str:
@@ -59,6 +85,7 @@ async def _answer_single_stock_reason(symbol: str, question: str) -> dict:
         "intent": "strong" if mover["change_percent"] >= 0 else "weak",
         "answer": _mover_line(mover, reasons[symbol]),
         "updated_at": detail.get("updated_at"),
+        "symbol": symbol,
         "sources": [{"symbol": symbol, "title": story["title"], "url": story["url"]} for story in news if _has_public_url([story])],
     }
 
@@ -82,6 +109,7 @@ async def _answer_single_stock_news(symbol: str) -> dict:
         "intent": "news",
         "answer": f'Recent news for {detail["name"]} ({symbol}):\n{summary}',
         "updated_at": detail.get("updated_at"),
+        "symbol": symbol,
         "sources": [{"symbol": symbol, "title": story["title"], "url": story["url"]} for story in news if _has_public_url([story])],
     }
 
@@ -97,6 +125,7 @@ async def _answer_single_stock_overview(symbol: str) -> dict:
         "intent": "stock",
         "answer": f'{detail["name"]} ({symbol}) is ${detail["price"]:.2f}{change_text}.\n\nRecent news:\n{summary}',
         "updated_at": detail.get("updated_at"),
+        "symbol": symbol,
         "sources": [{"symbol": symbol, "title": story["title"], "url": story["url"]} for story in news if _has_public_url([story])],
     }
 
@@ -104,9 +133,18 @@ async def _answer_single_stock_overview(symbol: str) -> dict:
 async def answer_market_question(question: str, context_symbol: str | None = None) -> dict:
     normalized = question.strip()
     lowered = normalized.lower()
-    explicit_symbol = _symbol(normalized)
     is_ranked_mover_question = any(term in lowered for term in RANKED_MOVER_TERMS)
-    symbol = explicit_symbol or (context_symbol.upper() if context_symbol and not is_ranked_mover_question else None)
+    if any(term in lowered for term in MARKET_STATUS_TERMS):
+        overview = await fetch_market_overview()
+        gainers = overview["gainers"][:10]
+        losers = overview["losers"][:10]
+        answer = "Today's Top 10 Gainers:\n" + "\n".join(_mover_line(item) for item in gainers)
+        answer += "\n\nToday's Top 10 Losers:\n" + "\n".join(_mover_line(item) for item in losers)
+        return {"intent": "market", "answer": answer, "updated_at": overview.get("updated_at"), "sources": []}
+
+    symbol = context_symbol.upper() if context_symbol and not is_ranked_mover_question else None
+    if not symbol and not is_ranked_mover_question:
+        symbol = await _resolve_symbol(normalized)
     if symbol and any(term in lowered for term in ("price", "trading", "quote", "how much")):
         detail = await fetch_stock_detail_yfinance(symbol)
         direction = "up" if (detail.get("change_percent") or 0) >= 0 else "down"
@@ -116,6 +154,7 @@ async def answer_market_question(question: str, context_symbol: str | None = Non
             "intent": "price",
             "answer": f'{detail["name"]} ({symbol}) is ${detail["price"]:.2f}{change_text}.',
             "updated_at": detail.get("updated_at"),
+            "symbol": symbol,
             "sources": [],
         }
 
@@ -129,14 +168,6 @@ async def answer_market_question(question: str, context_symbol: str | None = Non
 
     if symbol:
         return await _answer_single_stock_overview(symbol)
-
-    if any(term in lowered for term in MARKET_STATUS_TERMS):
-        overview = await fetch_market_overview()
-        gainers = overview["gainers"][:10]
-        losers = overview["losers"][:10]
-        answer = "Today's Top 10 Gainers:\n" + "\n".join(_mover_line(item) for item in gainers)
-        answer += "\n\nToday's Top 10 Losers:\n" + "\n".join(_mover_line(item) for item in losers)
-        return {"intent": "market", "answer": answer, "updated_at": overview.get("updated_at"), "sources": []}
 
     if any(term in lowered for term in ("strong", "strongest", "gainer", "gainers", "rising", "up today")):
         intent = "strong"
