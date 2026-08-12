@@ -32,12 +32,13 @@ def test_market_chat_uses_context_symbol_for_follow_up_news_question():
     }
     with (
         patch("app.services.market_chat_service.fetch_stock_detail_yfinance", new=AsyncMock(return_value=detail)),
-        patch("app.services.market_chat_service.analyze_movers_with_gemini", new=AsyncMock(return_value={"NVDA": "The platform announcement may have supported buying interest."})),
+        patch("app.services.market_chat_service.summarize_stock_news_with_gemini", new=AsyncMock(return_value="• NVIDIA announced a new AI platform.")),
     ):
         response = client().post("/market/chat", json={"question": "What are the news for it today?", "context_symbol": "nvda"})
     assert response.status_code == 200
-    assert response.json()["intent"] == "strong"
-    assert "NVDA rose 2.50%" in response.json()["answer"]
+    assert response.json()["intent"] == "news"
+    assert "Recent news for NVIDIA (NVDA)" in response.json()["answer"]
+    assert "announced a new AI platform" in response.json()["answer"]
     assert response.json()["sources"][0]["symbol"] == "NVDA"
 
 

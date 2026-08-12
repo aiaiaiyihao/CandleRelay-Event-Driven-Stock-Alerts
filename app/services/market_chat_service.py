@@ -1,7 +1,7 @@
 import asyncio
 import re
 
-from app.services.gemini_service import analyze_movers_with_gemini
+from app.services.gemini_service import analyze_movers_with_gemini, summarize_stock_news_with_gemini
 from app.services.yfinance_service import (
     fetch_market_overview,
     fetch_stock_detail_yfinance,
@@ -58,6 +58,29 @@ async def _answer_single_stock_reason(symbol: str, question: str) -> dict:
     }
 
 
+def _news_fallback(stories: list[dict]) -> str:
+    if not stories:
+        return "No recent published news was found for this ticker."
+    lines = []
+    for story in stories:
+        title = story.get("title", "Untitled coverage")
+        summary = story.get("summary")
+        lines.append(f"• {title}{': ' + summary if summary else ''}")
+    return "\n".join(lines)
+
+
+async def _answer_single_stock_news(symbol: str) -> dict:
+    detail = await fetch_stock_detail_yfinance(symbol)
+    news = await _news_with_urls(symbol, detail.get("news", []))
+    summary = await summarize_stock_news_with_gemini(symbol, news) or _news_fallback(news)
+    return {
+        "intent": "news",
+        "answer": f'Recent news for {detail["name"]} ({symbol}):\n{summary}',
+        "updated_at": detail.get("updated_at"),
+        "sources": [{"symbol": symbol, "title": story["title"], "url": story["url"]} for story in news if _has_public_url([story])],
+    }
+
+
 async def answer_market_question(question: str, context_symbol: str | None = None) -> dict:
     normalized = question.strip()
     lowered = normalized.lower()
@@ -76,7 +99,12 @@ async def answer_market_question(question: str, context_symbol: str | None = Non
             "sources": [],
         }
 
-    if symbol and any(term in lowered for term in ("why", "reason", "news", "rising", "falling", "up", "down")):
+    news_question = any(term in lowered for term in ("news", "headline", "headlines", "latest", "updates"))
+    causal_question = any(term in lowered for term in ("why", "reason", "rising", "falling", "up", "down", "because"))
+    if symbol and news_question and not causal_question:
+        return await _answer_single_stock_news(symbol)
+
+    if symbol and causal_question:
         return await _answer_single_stock_reason(symbol, normalized)
 
     if any(term in lowered for term in ("strong", "strongest", "gainer", "gainers", "rising", "up today")):

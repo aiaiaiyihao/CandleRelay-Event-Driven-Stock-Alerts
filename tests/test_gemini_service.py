@@ -1,7 +1,7 @@
 import asyncio
 from unittest.mock import AsyncMock, patch
 
-from app.services.gemini_service import analyze_movers_with_gemini
+from app.services.gemini_service import analyze_movers_with_gemini, summarize_stock_news_with_gemini
 
 
 MOVERS = [{"symbol": "NVDA", "change_percent": 5.0}]
@@ -70,4 +70,45 @@ def test_gemini_uses_cached_news_urls_with_url_context():
     ):
         answer = asyncio.run(analyze_movers_with_gemini("Why is NVDA rising?", MOVERS, NEWS))
     assert answer == {"NVDA": "Revenue news may have supported the move."}
+    assert cache_write.await_args.kwargs["ttl_seconds"] == 1800
+
+
+def test_gemini_summarizes_cached_news_urls_without_price_causation():
+    class NewsSummaryResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "steps": [{
+                    "type": "model_output",
+                    "content": [{"type": "text", "text": '{"summary":"• NVIDIA introduced a new enterprise AI platform."}'}],
+                }],
+            }
+
+    class NewsSummaryClient:
+        def __init__(self):
+            self.input = ""
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def post(self, url, headers, json):
+            self.input = json["input"]
+            assert "summarize recent news" in self.input
+            assert "https://example.com/nvda-news" in self.input
+            return NewsSummaryResponse()
+
+    cache_write = AsyncMock()
+    with (
+        patch("app.services.gemini_service.GEMINI_API_KEY", "test-key"),
+        patch("app.services.gemini_service.get_cached_json", new=AsyncMock(return_value=None)),
+        patch("app.services.gemini_service.set_cached_json", new=cache_write),
+        patch("app.services.gemini_service.httpx.AsyncClient", return_value=NewsSummaryClient()),
+    ):
+        answer = asyncio.run(summarize_stock_news_with_gemini("NVDA", NEWS[0]))
+    assert answer == "• NVIDIA introduced a new enterprise AI platform."
     assert cache_write.await_args.kwargs["ttl_seconds"] == 1800

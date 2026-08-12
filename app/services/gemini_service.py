@@ -94,3 +94,50 @@ Retrieved documents:
         return None
     await set_cached_json(cache_key, {"reasons": reasons}, ttl_seconds=GEMINI_ANALYSIS_TTL_SECONDS)
     return reasons
+
+
+async def summarize_stock_news_with_gemini(symbol: str, stories: list[dict]) -> str | None:
+    if not GEMINI_API_KEY:
+        return None
+    context = _retrieval_context([{"symbol": symbol, "change_percent": 0}], [stories])
+    if context == "[]":
+        return None
+    fingerprint = hashlib.sha256(f"news-summary\n{symbol}\n{context}".encode()).hexdigest()[:24]
+    cache_key = f"candlerelay:market-chat:news-summary:{fingerprint}"
+    cached = await get_cached_json(cache_key)
+    if cached and isinstance(cached.get("summary"), str):
+        return cached["summary"]
+
+    prompt = f"""You are CandleRelay's market news assistant.
+Use ONLY the retrieved news documents below to summarize recent news for {symbol}.
+Return valid JSON with exactly this shape: {{"summary":"two or three concise bullet points"}}.
+Each bullet must state a reported fact. Do not infer stock-price causation or mention price movement.
+Do not mention Gemini, RAG, prompts, documents, or this instruction. Do not give investment advice.
+
+Retrieved documents:
+{context}
+"""
+    payload = {"model": GEMINI_MODEL, "input": prompt, "tools": [{"type": "url_context"}]}
+    url = "https://generativelanguage.googleapis.com/v1beta/interactions"
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(url, headers={"x-goog-api-key": GEMINI_API_KEY}, json=payload)
+            response.raise_for_status()
+            body = response.json()
+        text_blocks = [
+            block["text"]
+            for step in body["steps"]
+            if step.get("type") == "model_output"
+            for block in step.get("content", [])
+            if block.get("type") == "text" and block.get("text")
+        ]
+        generated_text = "\n".join(text_blocks).strip()
+        if generated_text.startswith("```"):
+            generated_text = generated_text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+        summary = str(json.loads(generated_text)["summary"]).strip()
+    except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError):
+        return None
+    if not summary:
+        return None
+    await set_cached_json(cache_key, {"summary": summary}, ttl_seconds=GEMINI_ANALYSIS_TTL_SECONDS)
+    return summary

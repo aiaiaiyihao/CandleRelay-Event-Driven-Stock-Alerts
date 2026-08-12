@@ -16,7 +16,7 @@ class MarketChatSource(BaseModel):
 
 
 class MarketChatResponse(BaseModel):
-    intent: Literal["price", "strong", "weak", "help"]
+    intent: Literal["price", "news", "strong", "weak", "help"]
     answer: str
     updated_at: datetime | None = None
     sources: list[MarketChatSource] = Field(default_factory=list)
