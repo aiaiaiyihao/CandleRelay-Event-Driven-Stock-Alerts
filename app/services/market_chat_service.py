@@ -9,7 +9,11 @@ from app.services.yfinance_service import (
 )
 
 
-IGNORED_TOKENS = {"WHAT", "WHICH", "WHY", "SHOW", "STOCK", "STOCKS", "PRICE", "TODAY", "STRONG", "STRONGEST", "WEAK", "WEAKEST"}
+IGNORED_TOKENS = {
+    "WHAT", "WHICH", "WHY", "HOW", "IS", "ARE", "SHOW", "TELL", "ME", "ABOUT", "THE", "A", "AN", "FOR", "OF", "ON",
+    "IT", "ITS", "THIS", "THAT", "WITH", "AND", "TO", "IN", "STOCK", "STOCKS", "PRICE", "TODAY", "STRONG", "STRONGEST",
+    "WEAK", "WEAKEST",
+}
 RANKED_MOVER_TERMS = ("strongest", "weakest", "gainer", "gainers", "loser", "losers", "market leaders", "market laggards")
 MARKET_STATUS_TERMS = ("how is the market", "how's the market", "market overview", "market today", "market doing")
 
