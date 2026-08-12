@@ -271,6 +271,7 @@ function App() {
   const [market, setMarket] = useState({ indexes: [], gainers: [], losers: [], sectors: [], scope: 'Active US-listed stocks', market_state: 'CLOSED', updated_at: null, data_source: 'yfinance', data_status: 'live' })
   const [chatQuestion, setChatQuestion] = useState('')
   const [chatOpen, setChatOpen] = useState(false)
+  const [chatContextSymbol, setChatContextSymbol] = useState('')
   const [chatMessages, setChatMessages] = useState([{ role: 'assistant', answer: "Ask me about a ticker price, today's strongest stocks, weakest stocks, or the news behind those moves.", sources: [] }])
   const [moverPages, setMoverPages] = useState({ gainers: 0, losers: 0 })
   const [sectorStocks, setSectorStocks] = useState({ sector: '', page: 1, page_size: 10, total: 0, stocks: [], updated_at: null })
@@ -747,11 +748,16 @@ function App() {
   async function askMarket(question = chatQuestion) {
     const prompt = question.trim()
     if (!prompt || busy === 'market-chat') return
+    const ignoredTokens = new Set(['WHAT', 'WHICH', 'WHY', 'SHOW', 'STOCK', 'STOCKS', 'PRICE', 'TODAY', 'STRONG', 'STRONGEST', 'WEAK', 'WEAKEST'])
+    const explicitSymbol = (prompt.toUpperCase().match(/\b[A-Z]{1,5}(?:\.[A-Z])?\b/g) || []).find((token) => !ignoredTokens.has(token))
+    const rankedMoverQuestion = /strongest|weakest|gainer|loser|market leaders|market laggards/i.test(prompt)
+    const contextSymbol = rankedMoverQuestion ? null : (explicitSymbol || chatContextSymbol || null)
     setChatMessages((items) => [...items, { role: 'user', answer: prompt, sources: [] }])
     setChatQuestion('')
     setBusy('market-chat')
     try {
-      const response = await api.marketChat(prompt)
+      const response = await api.marketChat(prompt, contextSymbol)
+      if (explicitSymbol) setChatContextSymbol(explicitSymbol)
       setChatMessages((items) => [...items, { role: 'assistant', ...response }])
     } catch (error) {
       setChatMessages((items) => [...items, { role: 'assistant', answer: error.message, sources: [] }])
@@ -820,7 +826,7 @@ function App() {
               {busy === 'market-chat' && <article className="assistant thinking"><span>CR</span><p>ANALYZING CACHED MARKET DATA…</p></article>}
             </div>
             <div className="market-chat-prompts">{['What is NVDA price?', 'Which stocks are strongest today?', 'Why are the weakest stocks falling?'].map((prompt) => <button key={prompt} onClick={() => askMarket(prompt)} disabled={busy === 'market-chat'}>{prompt}</button>)}</div>
-            <form onSubmit={(event) => { event.preventDefault(); askMarket() }}><input value={chatQuestion} onChange={(event) => setChatQuestion(event.target.value)} maxLength={300} placeholder="Ask about a ticker, market leaders, laggards, or related news…" aria-label="Ask the market assistant" /><button disabled={!chatQuestion.trim() || busy === 'market-chat'}>ASK →</button></form>
+            <form onSubmit={(event) => { event.preventDefault(); askMarket() }}><input value={chatQuestion} onChange={(event) => setChatQuestion(event.target.value)} maxLength={300} placeholder="Ask about a ticker, then follow up on its news…" aria-label="Ask the market assistant" /><button disabled={!chatQuestion.trim() || busy === 'market-chat'}>ASK →</button></form>
           </div>
         </section>}
         <button className="market-chat-launcher" onClick={() => setChatOpen((value) => !value)} aria-label={chatOpen ? 'Close Market Assistant' : 'Open Market Assistant'} aria-expanded={chatOpen}><span>{chatOpen ? '×' : 'CR'}</span>{!chatOpen && <b>ASK MARKET</b>}</button>

@@ -10,6 +10,7 @@ from app.services.yfinance_service import (
 
 
 IGNORED_TOKENS = {"WHAT", "WHICH", "WHY", "SHOW", "STOCK", "STOCKS", "PRICE", "TODAY", "STRONG", "STRONGEST", "WEAK", "WEAKEST"}
+RANKED_MOVER_TERMS = ("strongest", "weakest", "gainer", "gainers", "loser", "losers", "market leaders", "market laggards")
 
 
 def _symbol(question: str) -> str | None:
@@ -57,10 +58,12 @@ async def _answer_single_stock_reason(symbol: str, question: str) -> dict:
     }
 
 
-async def answer_market_question(question: str) -> dict:
+async def answer_market_question(question: str, context_symbol: str | None = None) -> dict:
     normalized = question.strip()
     lowered = normalized.lower()
-    symbol = _symbol(normalized)
+    explicit_symbol = _symbol(normalized)
+    is_ranked_mover_question = any(term in lowered for term in RANKED_MOVER_TERMS)
+    symbol = explicit_symbol or (context_symbol.upper() if context_symbol and not is_ranked_mover_question else None)
     if symbol and any(term in lowered for term in ("price", "trading", "quote", "how much")):
         detail = await fetch_stock_detail_yfinance(symbol)
         direction = "up" if (detail.get("change_percent") or 0) >= 0 else "down"

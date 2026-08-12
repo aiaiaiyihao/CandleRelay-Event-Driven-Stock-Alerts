@@ -21,6 +21,26 @@ def test_market_chat_answers_ticker_price_from_stock_detail():
     assert "$190.00" in response.json()["answer"]
 
 
+def test_market_chat_uses_context_symbol_for_follow_up_news_question():
+    detail = {
+        "symbol": "NVDA",
+        "name": "NVIDIA",
+        "price": 190.0,
+        "change_percent": 2.5,
+        "updated_at": "2026-08-11T18:00:00Z",
+        "news": [{"title": "NVIDIA announces new AI platform", "url": "https://example.com/nvda"}],
+    }
+    with (
+        patch("app.services.market_chat_service.fetch_stock_detail_yfinance", new=AsyncMock(return_value=detail)),
+        patch("app.services.market_chat_service.analyze_movers_with_gemini", new=AsyncMock(return_value={"NVDA": "The platform announcement may have supported buying interest."})),
+    ):
+        response = client().post("/market/chat", json={"question": "What are the news for it today?", "context_symbol": "nvda"})
+    assert response.status_code == 200
+    assert response.json()["intent"] == "strong"
+    assert "NVDA rose 2.50%" in response.json()["answer"]
+    assert response.json()["sources"][0]["symbol"] == "NVDA"
+
+
 def test_market_chat_combines_gainers_with_news_context():
     overview = {"gainers": [{"symbol": "NVDA", "name": "NVIDIA", "price": 190.0, "change_percent": 5.0}], "losers": [], "updated_at": "2026-08-11T18:00:00Z"}
     news = [{"title": "NVIDIA announces new AI platform", "publisher": "Reuters", "url": "https://example.com/nvda"}]

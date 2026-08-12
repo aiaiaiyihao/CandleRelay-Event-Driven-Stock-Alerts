@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 class MarketChatRequest(BaseModel):
     question: str = Field(min_length=3, max_length=300)
+    context_symbol: str | None = Field(default=None, pattern=r"^[A-Za-z]{1,5}(?:\.[A-Za-z])?$")
 
 
 class MarketChatSource(BaseModel):

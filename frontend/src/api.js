@@ -26,9 +26,9 @@ export const api = {
   }),
   logout: () => request('/auth/logout', { method: 'POST' }),
   marketOverview: (refresh = false) => request(`/market/overview${refresh ? '?refresh=true' : ''}`),
-  marketChat: (question) => request('/market/chat', {
+  marketChat: (question, contextSymbol = null) => request('/market/chat', {
     method: 'POST',
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, context_symbol: contextSymbol || undefined }),
   }),
   sectorStocks: (sector, page = 1, sortOrder = 'desc') => request(`/market/sectors/${encodeURIComponent(sector)}/stocks?page=${page}&page_size=10&sort_order=${sortOrder}`),
   marketQuotes: (symbols) => request(`/market/quotes?symbols=${encodeURIComponent(symbols.join(','))}`),

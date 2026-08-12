@@ -14,7 +14,7 @@ router = APIRouter(prefix="/market", tags=["market"])
 @router.post("/chat", response_model=MarketChatResponse)
 async def market_chat(request: MarketChatRequest):
     try:
-        return await answer_market_question(request.question)
+        return await answer_market_question(request.question, request.context_symbol)
     except ValueError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
