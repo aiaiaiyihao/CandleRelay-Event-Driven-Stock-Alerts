@@ -116,6 +116,23 @@ function formatChartTimestamp(timestamp, interval, full = false) {
   })
 }
 
+function formatChartAxisTimestamp(timestamp, interval, sameTradingDay = false) {
+  const value = new Date(timestamp)
+  if (INTRADAY_INTERVALS.has(interval)) {
+    return value.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  }
+  return value.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: interval === '1mo' ? 'numeric' : undefined })
+}
+
+function chartPriceDecimals(domain) {
+  if (!Array.isArray(domain) || !domain.every(Number.isFinite)) return 0
+  const range = Math.abs(domain[1] - domain[0])
+  if (range < 0.1) return 3
+  if (range < 2) return 2
+  if (range < 20) return 1
+  return 0
+}
+
 function formatChartNumber(value) {
   return Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(value)
 }
@@ -133,7 +150,7 @@ function ChartTooltip({ active, payload, label, chartMode, averages }) {
   return <div className="chart-tooltip"><span>{point.tooltipDate || label}</span>{payload.filter((item) => item.dataKey !== 'volume').map((item) => <div key={item.dataKey}><i style={{ background: item.color }} />{item.name}<strong>${Number(item.value).toFixed(2)}</strong></div>)}</div>
 }
 
-function Candlestick({ x, width, payload, background, domain }) {
+function Candlestick({ x, width, payload, background, domain, isActive }) {
   if (!payload || !background || !domain.every(Number.isFinite)) return null
   const [minimum, maximum] = domain
   const range = Math.max(maximum - minimum, 0.000001)
@@ -145,7 +162,7 @@ function Candlestick({ x, width, payload, background, domain }) {
   const candleWidth = Math.max(4, Math.min(width * 0.72, 10))
   const bodyTop = Math.min(openY, closeY)
   const bodyHeight = Math.max(1.5, Math.abs(closeY - openY))
-  return <g className="candlestick"><line x1={center} x2={center} y1={toY(payload.high)} y2={toY(payload.low)} stroke={color} strokeWidth="1" /><rect x={center - candleWidth / 2} y={bodyTop} width={candleWidth} height={bodyHeight} rx=".5" fill={color} /></g>
+  return <g className={`candlestick ${isActive ? 'active' : ''}`} opacity={isActive ? 1 : 0.9}><line x1={center} x2={center} y1={toY(payload.high)} y2={toY(payload.low)} stroke={color} strokeWidth={isActive ? "1.35" : "1"} /><rect x={center - candleWidth / 2} y={bodyTop} width={candleWidth} height={bodyHeight} rx=".5" fill={color} stroke={isActive ? '#f1f0eb' : 'none'} strokeWidth=".55" /></g>
 }
 
 function MoverList({ title, items, tone, page, setPage, selectedSymbol, selectSymbol, previewSymbol, cancelPreview, tracked, trackSymbol, untrackSymbol }) {
@@ -185,6 +202,7 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
     const padding = range * yPaddingRatios[yStretch]
     return [minimum - padding, maximum + padding]
   }, [visibleData, averages, yStretch, chartMode])
+  const priceDecimals = chartPriceDecimals(yDomain)
 
   useEffect(() => {
     setZoomLevel(0)
@@ -253,14 +271,14 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
           <button disabled={yStretch === yPaddingRatios.length - 1} onClick={() => setYStretch((value) => Math.min(yPaddingRatios.length - 1, value + 1))} aria-label="Stretch price axis">+</button>
           <button className="chart-reset" onClick={resetChartView}>RESET</button>
         </div>
-        {visibleData.length ? <ResponsiveContainer width="100%" height="100%"><ComposedChart data={visibleData} margin={{ top: 62, right: 14, bottom: 4, left: 0 }}>
+        {visibleData.length ? <ResponsiveContainer width="100%" height="100%"><ComposedChart data={visibleData} margin={{ top: 62, right: 22, bottom: 4, left: 12 }}>
           <defs><linearGradient id={compact ? 'dashboardPriceFill' : 'favoritePriceFill'} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e76d2d" stopOpacity={0.28} /><stop offset="100%" stopColor="#e76d2d" stopOpacity={0} /></linearGradient></defs>
           <CartesianGrid stroke="#252728" vertical={false} />
-          <XAxis dataKey="date" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} minTickGap={34} />
-          <YAxis domain={yDomain} allowDataOverflow={false} orientation="right" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} width={52} tickFormatter={(value) => `$${Number(value).toFixed(0)}`} />
+          <XAxis dataKey="axisDate" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} minTickGap={44} interval="preserveStartEnd" />
+          <YAxis domain={yDomain} allowDataOverflow={false} orientation="right" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} width={58} tickFormatter={(value) => `$${Number(value).toFixed(priceDecimals)}`} />
           <YAxis yAxisId="volume" domain={[0, (maximum) => Math.max(maximum * 4.5, 1)]} hide />
           <Tooltip content={<ChartTooltip chartMode={chartMode} averages={averages} />} cursor={{ stroke: '#c7c8c2', strokeWidth: 1, strokeOpacity: 0.7 }} />
-          <Bar yAxisId="volume" dataKey="volume" name="Volume" fill="#5c6260" fillOpacity={0.3} maxBarSize={12} isAnimationActive={false} />
+          <Bar yAxisId="volume" dataKey="volume" name="Volume" fill="#5c6260" fillOpacity={0.3} activeBar={{ fill: '#9da29d', fillOpacity: 0.52 }} maxBarSize={12} isAnimationActive={false} />
           {chartMode === 'line' ? <Area type="monotone" dataKey="close" name="Price" stroke="#e9e7e1" strokeWidth={2} fill={`url(#${compact ? 'dashboardPriceFill' : 'favoritePriceFill'})`} dot={false} /> : <Bar dataKey="close" name="Price" fill="transparent" background={{ fill: 'transparent' }} shape={(props) => <Candlestick {...props} domain={yDomain} />} isAnimationActive={false} />}
           {averages.sma_20 && <Line type="monotone" dataKey="sma_20" name="SMA 20" stroke="#e76d2d" strokeWidth={1.5} dot={false} />}
           {averages.sma_50 && <Line type="monotone" dataKey="sma_50" name="SMA 50" stroke="#5fd398" strokeWidth={1.4} dot={false} />}
@@ -466,6 +484,7 @@ function App() {
         setChartData(result.points.map((point) => ({
           ...point,
           date: formatChartTimestamp(point.timestamp, result.interval),
+          axisDate: formatChartAxisTimestamp(point.timestamp, result.interval),
           tooltipDate: formatChartTimestamp(point.timestamp, result.interval, true),
         })))
         setChartMessage('')
