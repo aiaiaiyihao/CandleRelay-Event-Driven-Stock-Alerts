@@ -15,23 +15,13 @@ class HeuristicCompilerProvider:
     def generate_candidate(self, text: str) -> dict[str, Any]:
         symbol = self._symbol(text)
         timeframe, warning = self._timeframe(text)
-        technical_condition, default_period = self._technical_condition(text)
-        conditions = [technical_condition]
-
-        volume_ratio = self._volume_ratio(text)
-        if volume_ratio is not None:
-            volume_period = self._volume_period(text) or default_period
-            conditions.append(
-                {
-                    "left": {
-                        "type": "indicator",
-                        "indicator": "volume_ratio",
-                        "period": volume_period,
-                    },
-                    "operator": ">",
-                    "right": {"type": "value", "value": volume_ratio},
-                }
-            )
+        technical_conditions, default_period = self._technical_conditions(text)
+        conditions = [*technical_conditions, *self._price_value_conditions(text)]
+        volume_condition = self._volume_condition(text, default_period or 20)
+        if volume_condition:
+            conditions.append(volume_condition)
+        if not conditions:
+            raise UnsupportedRuleText("could not identify a supported rule condition")
 
         warnings = [warning] if warning else []
         return {
@@ -50,14 +40,13 @@ class HeuristicCompilerProvider:
             "warnings": warnings,
         }
 
-    def _technical_condition(self, text: str) -> tuple[dict[str, Any], int]:
+    def _technical_conditions(self, text: str) -> tuple[list[dict[str, Any]], int | None]:
         ema_match = re.search(r"EMA\s*[_-]?(\d+)", text, re.IGNORECASE)
         sma_match = re.search(r"SMA\s*[_-]?(\d+)", text, re.IGNORECASE)
         if ema_match and sma_match:
             ema_period = int(ema_match.group(1))
             sma_period = int(sma_match.group(1))
-            return (
-                {
+            return ([{
                     "left": {
                         "type": "indicator",
                         "indicator": "ema",
@@ -69,16 +58,13 @@ class HeuristicCompilerProvider:
                         "indicator": "sma",
                         "period": sma_period,
                     },
-                },
-                max(ema_period, sma_period),
-            )
+                }], max(ema_period, sma_period))
 
         rsi_match = re.search(r"RSI\s*[_-]?(\d+)", text, re.IGNORECASE)
         if rsi_match:
             period = int(rsi_match.group(1))
             operator, value = self._threshold_comparison(text, rsi_match.end())
-            return (
-                {
+            return ([{
                     "left": {
                         "type": "indicator",
                         "indicator": "rsi",
@@ -86,13 +72,12 @@ class HeuristicCompilerProvider:
                     },
                     "operator": operator,
                     "right": {"type": "value", "value": value},
-                },
-                period,
-            )
+                }], period)
 
-        sma_period = self._sma_period(text)
-        return (
-            {
+        sma_match = re.search(r"SMA\s*[_-]?(\d+)", text, re.IGNORECASE)
+        if sma_match:
+            sma_period = int(sma_match.group(1))
+            return ([{
                 "left": {"type": "metric", "metric": "price"},
                 "operator": self._price_operator(text),
                 "right": {
@@ -100,9 +85,55 @@ class HeuristicCompilerProvider:
                     "indicator": "sma",
                     "period": sma_period,
                 },
-            },
-            sma_period,
+            }], sma_period)
+        return [], None
+
+    @staticmethod
+    def _price_value_conditions(text: str) -> list[dict[str, Any]]:
+        range_match = re.search(
+            r"(?:price|trades?|trading)\s+(?:is\s+)?(?:between|from)\s*\$?(\d+(?:\.\d+)?)\s+(?:and|to)\s*\$?(\d+(?:\.\d+)?)",
+            text,
+            re.IGNORECASE,
         )
+        if range_match:
+            lower, upper = sorted((float(range_match.group(1)), float(range_match.group(2))))
+            return [
+                {"left": {"type": "metric", "metric": "price"}, "operator": ">=", "right": {"type": "value", "value": lower}},
+                {"left": {"type": "metric", "metric": "price"}, "operator": "<=", "right": {"type": "value", "value": upper}},
+            ]
+
+        comparison = re.search(
+            r"(?:price|trades?|trading)\s+(?:is\s+)?(above|over|greater\s+than|below|under|less\s+than|>=?|<=?)\s*\$?(\d+(?:\.\d+)?)",
+            text,
+            re.IGNORECASE,
+        )
+        if not comparison:
+            return []
+        phrase = comparison.group(1).lower()
+        operator = ">" if phrase in {"above", "over", "greater than", ">"} else "<"
+        if phrase == ">=": operator = ">="
+        if phrase == "<=": operator = "<="
+        return [{
+            "left": {"type": "metric", "metric": "price"},
+            "operator": operator,
+            "right": {"type": "value", "value": float(comparison.group(2))},
+        }]
+
+    def _volume_condition(self, text: str, default_period: int) -> dict[str, Any] | None:
+        volume_ratio = self._volume_ratio(text)
+        if volume_ratio is None:
+            return None
+        volume_phrase = text[text.lower().find("volume"):]
+        operator = "<" if re.search(r"less\s+than|below|under", volume_phrase, re.IGNORECASE) else ">"
+        return {
+            "left": {
+                "type": "indicator",
+                "indicator": "volume_ratio",
+                "period": self._volume_period(text) or default_period,
+            },
+            "operator": operator,
+            "right": {"type": "value", "value": volume_ratio},
+        }
 
     @staticmethod
     def _symbol(text: str) -> str:
@@ -122,8 +153,12 @@ class HeuristicCompilerProvider:
 
     @staticmethod
     def _price_operator(text: str) -> str:
+        if re.search(r"cross(?:es)?\s+above", text, re.IGNORECASE):
+            return "crosses_above"
         if re.search(r"cross(?:es)?\s+below", text, re.IGNORECASE):
             return "crosses_below"
+        if re.search(r"above|greater\s+than", text, re.IGNORECASE):
+            return ">"
         if re.search(r"below|less\s+than", text, re.IGNORECASE):
             return "<"
         raise UnsupportedRuleText("could not identify the price comparison")
@@ -177,11 +212,15 @@ class HeuristicCompilerProvider:
 
     @staticmethod
     def _timeframe(text: str) -> tuple[str, str | None]:
-        minute = re.search(r"(1|5|15)\s*min(?:ute)?s?", text, re.IGNORECASE)
+        minute = re.search(
+            r"\b(1|5|15)\s*(?:m\b|[- ]?min(?:ute)?s?\b)",
+            text,
+            re.IGNORECASE,
+        )
         if minute:
             return f"{minute.group(1)}m", None
-        if re.search(r"(?:1\s*)?hour", text, re.IGNORECASE):
+        if re.search(r"\b(?:1\s*h|(?:1\s*)?hour(?:ly|s)?)\b", text, re.IGNORECASE):
             return "1h", None
-        if re.search(r"daily|day\s+bars?", text, re.IGNORECASE):
+        if re.search(r"\b(?:1\s*d|daily|(?:1\s*)?day(?:\s+bars?)?)\b", text, re.IGNORECASE):
             return "1d", None
         return "1d", "No timeframe was specified; defaulted to daily bars (1d)."
