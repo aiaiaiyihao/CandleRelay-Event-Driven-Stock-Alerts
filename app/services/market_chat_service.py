@@ -11,6 +11,7 @@ from app.services.yfinance_service import (
 
 IGNORED_TOKENS = {"WHAT", "WHICH", "WHY", "SHOW", "STOCK", "STOCKS", "PRICE", "TODAY", "STRONG", "STRONGEST", "WEAK", "WEAKEST"}
 RANKED_MOVER_TERMS = ("strongest", "weakest", "gainer", "gainers", "loser", "losers", "market leaders", "market laggards")
+MARKET_STATUS_TERMS = ("how is the market", "how's the market", "market overview", "market today", "market doing")
 
 
 def _symbol(question: str) -> str | None:
@@ -81,6 +82,21 @@ async def _answer_single_stock_news(symbol: str) -> dict:
     }
 
 
+async def _answer_single_stock_overview(symbol: str) -> dict:
+    detail = await fetch_stock_detail_yfinance(symbol)
+    change = detail.get("change_percent")
+    direction = "up" if (change or 0) >= 0 else "down"
+    change_text = f", {direction} {abs(change):.2f}% today" if change is not None else ""
+    news = await _news_with_urls(symbol, detail.get("news", []))
+    summary = await summarize_stock_news_with_gemini(symbol, news) or _news_fallback(news)
+    return {
+        "intent": "stock",
+        "answer": f'{detail["name"]} ({symbol}) is ${detail["price"]:.2f}{change_text}.\n\nRecent news:\n{summary}',
+        "updated_at": detail.get("updated_at"),
+        "sources": [{"symbol": symbol, "title": story["title"], "url": story["url"]} for story in news if _has_public_url([story])],
+    }
+
+
 async def answer_market_question(question: str, context_symbol: str | None = None) -> dict:
     normalized = question.strip()
     lowered = normalized.lower()
@@ -106,6 +122,17 @@ async def answer_market_question(question: str, context_symbol: str | None = Non
 
     if symbol and causal_question:
         return await _answer_single_stock_reason(symbol, normalized)
+
+    if symbol:
+        return await _answer_single_stock_overview(symbol)
+
+    if any(term in lowered for term in MARKET_STATUS_TERMS):
+        overview = await fetch_market_overview()
+        gainers = overview["gainers"][:10]
+        losers = overview["losers"][:10]
+        answer = "Today's Top 10 Gainers:\n" + "\n".join(_mover_line(item) for item in gainers)
+        answer += "\n\nToday's Top 10 Losers:\n" + "\n".join(_mover_line(item) for item in losers)
+        return {"intent": "market", "answer": answer, "updated_at": overview.get("updated_at"), "sources": []}
 
     if any(term in lowered for term in ("strong", "strongest", "gainer", "gainers", "rising", "up today")):
         intent = "strong"
