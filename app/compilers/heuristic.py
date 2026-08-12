@@ -212,11 +212,15 @@ class HeuristicCompilerProvider:
 
     @staticmethod
     def _timeframe(text: str) -> tuple[str, str | None]:
-        minute = re.search(r"(1|5|15)\s*min(?:ute)?s?", text, re.IGNORECASE)
+        minute = re.search(
+            r"\b(1|5|15)\s*(?:m\b|[- ]?min(?:ute)?s?\b)",
+            text,
+            re.IGNORECASE,
+        )
         if minute:
             return f"{minute.group(1)}m", None
-        if re.search(r"(?:1\s*)?hour", text, re.IGNORECASE):
+        if re.search(r"\b(?:1\s*h|(?:1\s*)?hour(?:ly|s)?)\b", text, re.IGNORECASE):
             return "1h", None
-        if re.search(r"daily|day\s+bars?", text, re.IGNORECASE):
+        if re.search(r"\b(?:1\s*d|daily|(?:1\s*)?day(?:\s+bars?)?)\b", text, re.IGNORECASE):
             return "1d", None
         return "1d", "No timeframe was specified; defaulted to daily bars (1d)."

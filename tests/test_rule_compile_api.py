@@ -131,3 +131,23 @@ def test_compiles_moving_average_price_range_and_volume_together():
     assert conditions[1]["right"]["value"] == 120.0
     assert conditions[2]["right"]["value"] == 150.0
     assert conditions[3]["left"]["period"] == 50
+
+
+def test_compiles_all_supported_alert_timeframe_phrasings():
+    cases = [
+        ("1m", "1m"),
+        ("5-minute bars", "5m"),
+        ("15 min", "15m"),
+        ("1h", "1h"),
+        ("hourly", "1h"),
+        ("1d", "1d"),
+        ("daily bars", "1d"),
+    ]
+    for phrase, expected in cases:
+        response = client().post(
+            "/rules/compile",
+            json={"text": f"Alert when NVDA crosses below SMA20 on {phrase}."},
+        )
+        assert response.status_code == 200, response.json()
+        assert response.json()["definition"]["timeframe"] == expected
+        assert response.json()["warnings"] == []
