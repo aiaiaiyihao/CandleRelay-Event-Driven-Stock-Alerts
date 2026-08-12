@@ -88,3 +88,46 @@ def test_compiles_indicator_cross_rule():
         "operator": "crosses_above",
         "right": {"type": "indicator", "indicator": "sma", "period": 50},
     }
+
+
+def test_compiles_each_condition_category_on_its_own():
+    cases = [
+        ("Alert when MSFT price is above SMA200.", "sma", 200),
+        ("Alert when AAPL price is below $175.", "value", 175.0),
+        ("Alert when TSLA volume is more than 1.5 times the past 30 days average.", "volume_ratio", 30),
+    ]
+    for text, operand_type, expected in cases:
+        response = client().post("/rules/compile", json={"text": text})
+        assert response.status_code == 200, response.json()
+        conditions = response.json()["definition"]["conditions"]["all"]
+        assert len(conditions) == 1
+        condition = conditions[0]
+        if operand_type == "sma":
+            assert condition["right"] == {"type": "indicator", "indicator": "sma", "period": expected}
+        elif operand_type == "value":
+            assert condition["right"] == {"type": "value", "value": expected}
+        else:
+            assert condition["left"] == {"type": "indicator", "indicator": "volume_ratio", "period": expected}
+
+
+def test_compiles_any_two_condition_categories():
+    response = client().post(
+        "/rules/compile",
+        json={"text": "Alert when NVDA crosses below SMA50 and price is above $100."},
+    )
+    assert response.status_code == 200, response.json()
+    conditions = response.json()["definition"]["conditions"]["all"]
+    assert [condition["operator"] for condition in conditions] == ["crosses_below", ">"]
+
+
+def test_compiles_moving_average_price_range_and_volume_together():
+    response = client().post(
+        "/rules/compile",
+        json={"text": "Alert when NVDA crosses above SMA20, price is between $120 and $150, and volume is more than 2 times the past 50 trading days average."},
+    )
+    assert response.status_code == 200, response.json()
+    conditions = response.json()["definition"]["conditions"]["all"]
+    assert [condition["operator"] for condition in conditions] == ["crosses_above", ">=", "<=", ">"]
+    assert conditions[1]["right"]["value"] == 120.0
+    assert conditions[2]["right"]["value"] == 150.0
+    assert conditions[3]["left"]["period"] == 50
