@@ -21,7 +21,7 @@ def test_gemini_analysis_is_disabled_without_api_key():
 def test_gemini_analysis_reuses_cached_rag_answer():
     with (
         patch("app.services.gemini_service.GEMINI_API_KEY", "test-key"),
-        patch("app.services.gemini_service.get_cached_json", new=AsyncMock(return_value={"answer": "Cached grounded analysis."})),
+        patch("app.services.gemini_service.get_cached_json", new=AsyncMock(return_value={"reasons": {"NVDA": "Cached grounded analysis."}})),
     ):
         answer = asyncio.run(analyze_movers_with_gemini("Why is NVDA rising?", MOVERS, NEWS))
-    assert answer == "Cached grounded analysis."
+    assert answer == {"NVDA": "Cached grounded analysis."}

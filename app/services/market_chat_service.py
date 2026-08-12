@@ -19,9 +19,10 @@ def _symbol(question: str) -> str | None:
     return None
 
 
-def _mover_line(item: dict) -> str:
-    sign = "+" if item["change_percent"] >= 0 else ""
-    return f'{item["symbol"]} {sign}{item["change_percent"]:.2f}% (${item["price"]:.2f})'
+def _mover_line(item: dict, reason: str | None = None) -> str:
+    direction = "rose" if item["change_percent"] >= 0 else "fell"
+    line = f'{item["symbol"]} {direction} {abs(item["change_percent"]):.2f}% to ${item["price"]:.2f}'
+    return f"{line} — {reason}" if reason else line
 
 
 async def answer_market_question(question: str) -> dict:
@@ -58,23 +59,18 @@ async def answer_market_question(question: str) -> dict:
 
     overview = await fetch_market_overview()
     movers = overview[key][:5]
-    answer = f'{heading}: ' + "; ".join(_mover_line(item) for item in movers) + "."
+    answer = f'{heading}:\n' + "\n".join(_mover_line(item) for item in movers)
     sources = []
     if any(term in lowered for term in ("why", "reason", "news", "because")) and movers:
         news_groups = await asyncio.gather(*(fetch_stock_news_yfinance(item["symbol"]) for item in movers))
-        contexts = []
+        fallback_reasons = {}
         for item, news in zip(movers, news_groups):
             if not news:
+                fallback_reasons[item["symbol"]] = "No recent news evidence clearly explains the move."
                 continue
             story = news[0]
-            contexts.append(f'{item["symbol"]}: {story["title"]}')
+            fallback_reasons[item["symbol"]] = f'Recent coverage reports “{story["title"]}”; this provides context but does not prove causation.'
             sources.append({"symbol": item["symbol"], "title": story["title"], "url": story["url"]})
-        if contexts:
-            analysis = await analyze_movers_with_gemini(normalized, movers, news_groups)
-            if analysis:
-                answer += " Gemini RAG analysis: " + analysis
-            else:
-                answer += " Recent news context: " + "; ".join(contexts) + ". Headlines provide context, not proof of causation."
-        else:
-            answer += " No recent company headlines were available to explain the moves; price action alone does not establish a cause."
+        reasons = await analyze_movers_with_gemini(normalized, movers, news_groups) or fallback_reasons
+        answer = f'{heading}:\n' + "\n".join(_mover_line(item, reasons.get(item["symbol"], "No recent news evidence clearly explains the move.")) for item in movers)
     return {"intent": intent, "answer": answer, "updated_at": overview.get("updated_at"), "sources": sources}

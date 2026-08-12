@@ -27,12 +27,13 @@ def test_market_chat_combines_gainers_with_news_context():
     with (
         patch("app.services.market_chat_service.fetch_market_overview", new=AsyncMock(return_value=overview)),
         patch("app.services.market_chat_service.fetch_stock_news_yfinance", new=AsyncMock(return_value=news)),
-        patch("app.services.market_chat_service.analyze_movers_with_gemini", new=AsyncMock(return_value="NVDA's move may be linked to its reported AI platform announcement.")),
+        patch("app.services.market_chat_service.analyze_movers_with_gemini", new=AsyncMock(return_value={"NVDA": "Its reported AI platform announcement may have supported buying interest."})),
     ):
         response = client().post("/market/chat", json={"question": "Why are the strongest stocks rising?"})
     body = response.json()
     assert body["intent"] == "strong"
-    assert "Gemini RAG analysis" in body["answer"]
+    assert "Gemini" not in body["answer"]
+    assert "NVDA rose 5.00% to $190.00 —" in body["answer"]
     assert "AI platform announcement" in body["answer"]
     assert body["sources"][0]["symbol"] == "NVDA"
 
