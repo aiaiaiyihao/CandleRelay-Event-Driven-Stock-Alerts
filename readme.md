@@ -126,7 +126,8 @@ python -m scripts.import_market_bars examples/nvda_daily.csv \
   --symbol NVDA --timeframe 1d --source demo
 ```
 
-Configuration:
+Create `docker/.env` for optional provider credentials used by Docker Compose
+(the file is ignored by Git):
 
 ```text
 DATABASE_URL=postgresql://admin:admin@localhost:5432/marketdb
