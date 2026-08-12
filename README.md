@@ -2,6 +2,8 @@
 
 CandleRelay is a full-stack market workspace that turns validated stock-alert rules into both live event processing and reproducible historical backtests.
 
+**Author:** Oliver (Yihao) Ai
+
 ## Overview
 
 Retail investors and analysts often have to monitor many price, moving-average, and volume conditions manually. CandleRelay provides a single workflow for creating a market rule in natural language, reviewing the validated Rule DSL it produces, monitoring live market events, and replaying that same rule against stored OHLCV bars.
