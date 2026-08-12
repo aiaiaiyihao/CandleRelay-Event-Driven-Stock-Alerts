@@ -28,6 +28,7 @@ def test_stock_news_normalizes_and_caches_latest_items():
         "publisher": "Reuters",
         "published_at": "2026-08-11T18:00:00Z",
         "url": "https://example.com/nvidia",
+        "summary": None,
     }]
     set_cache.assert_awaited_once()
     assert set_cache.await_args.kwargs["ttl_seconds"] in {300, 900, 3600}

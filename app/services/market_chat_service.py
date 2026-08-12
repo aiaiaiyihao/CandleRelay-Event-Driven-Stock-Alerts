@@ -1,6 +1,7 @@
 import asyncio
 import re
 
+from app.services.gemini_service import analyze_movers_with_gemini
 from app.services.yfinance_service import (
     fetch_market_overview,
     fetch_stock_detail_yfinance,
@@ -69,7 +70,11 @@ async def answer_market_question(question: str) -> dict:
             contexts.append(f'{item["symbol"]}: {story["title"]}')
             sources.append({"symbol": item["symbol"], "title": story["title"], "url": story["url"]})
         if contexts:
-            answer += " Recent news context: " + "; ".join(contexts) + ". Headlines provide context, not proof of causation."
+            analysis = await analyze_movers_with_gemini(normalized, movers, news_groups)
+            if analysis:
+                answer += " Gemini RAG analysis: " + analysis
+            else:
+                answer += " Recent news context: " + "; ".join(contexts) + ". Headlines provide context, not proof of causation."
         else:
             answer += " No recent company headlines were available to explain the moves; price action alone does not establish a cause."
     return {"intent": intent, "answer": answer, "updated_at": overview.get("updated_at"), "sources": sources}

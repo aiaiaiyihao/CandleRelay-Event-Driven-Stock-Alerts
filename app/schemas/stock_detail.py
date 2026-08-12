@@ -8,6 +8,7 @@ class StockNewsItem(BaseModel):
     publisher: str
     published_at: datetime | None = None
     url: str
+    summary: str | None = None
 
 
 class StockDetailResponse(BaseModel):

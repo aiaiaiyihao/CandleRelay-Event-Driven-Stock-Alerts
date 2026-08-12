@@ -215,6 +215,7 @@ async def fetch_stock_news_yfinance(symbol: str, force_refresh: bool = False) ->
             "publisher": provider.get("displayName") or content.get("publisher") or "Market News",
             "published_at": content.get("pubDate") or content.get("providerPublishTime"),
             "url": url,
+            "summary": content.get("summary") or content.get("description"),
         })
         if len(news) == 5:
             break
