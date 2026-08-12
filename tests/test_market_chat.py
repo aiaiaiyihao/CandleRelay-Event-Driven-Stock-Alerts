@@ -42,3 +42,17 @@ def test_market_chat_returns_help_for_unsupported_question():
     response = client().post("/market/chat", json={"question": "Tell me something interesting"})
     assert response.status_code == 200
     assert response.json()["intent"] == "help"
+
+
+def test_market_chat_refreshes_only_one_stock_when_cached_news_has_no_url():
+    detail = {"symbol": "NVDA", "name": "NVIDIA", "price": 190.0, "change_percent": 5.0, "updated_at": "2026-08-11T18:00:00Z", "news": [{"title": "Cached title", "url": ""}]}
+    refreshed = [{"title": "NVIDIA launches an AI platform", "url": "https://example.com/nvda", "summary": "New products", "publisher": "Reuters"}]
+    with (
+        patch("app.services.market_chat_service.fetch_stock_detail_yfinance", new=AsyncMock(return_value=detail)),
+        patch("app.services.market_chat_service.fetch_stock_news_yfinance", new=AsyncMock(return_value=refreshed)) as fetch_news,
+        patch("app.services.market_chat_service.analyze_movers_with_gemini", new=AsyncMock(return_value={"NVDA": "Its platform launch may have supported buying interest."})),
+    ):
+        response = client().post("/market/chat", json={"question": "Why is NVDA rising?"})
+    assert response.status_code == 200
+    assert "NVDA rose 5.00%" in response.json()["answer"]
+    fetch_news.assert_awaited_once_with("NVDA", force_refresh=True)

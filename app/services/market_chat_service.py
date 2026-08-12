@@ -25,6 +25,38 @@ def _mover_line(item: dict, reason: str | None = None) -> str:
     return f"{line} — {reason}" if reason else line
 
 
+def _has_public_url(stories: list[dict]) -> bool:
+    return any(isinstance(story.get("url"), str) and story["url"].startswith(("https://", "http://")) for story in stories)
+
+
+async def _news_with_urls(symbol: str, initial_stories: list[dict] | None = None) -> list[dict]:
+    stories = initial_stories if initial_stories is not None else await fetch_stock_news_yfinance(symbol)
+    if not _has_public_url(stories):
+        stories = await fetch_stock_news_yfinance(symbol, force_refresh=True)
+    return stories[:3]
+
+
+async def _answer_single_stock_reason(symbol: str, question: str) -> dict:
+    detail = await fetch_stock_detail_yfinance(symbol)
+    mover = {
+        "symbol": symbol,
+        "price": detail["price"],
+        "change_percent": detail.get("change_percent") or 0,
+    }
+    news = await _news_with_urls(symbol, detail.get("news", []))
+    fallback = (
+        f'Recent coverage reports “{news[0]["title"]}”; this provides context but does not prove causation.'
+        if news else "No recent news evidence clearly explains the move."
+    )
+    reasons = await analyze_movers_with_gemini(question, [mover], [news]) or {symbol: fallback}
+    return {
+        "intent": "strong" if mover["change_percent"] >= 0 else "weak",
+        "answer": _mover_line(mover, reasons[symbol]),
+        "updated_at": detail.get("updated_at"),
+        "sources": [{"symbol": symbol, "title": story["title"], "url": story["url"]} for story in news if _has_public_url([story])],
+    }
+
+
 async def answer_market_question(question: str) -> dict:
     normalized = question.strip()
     lowered = normalized.lower()
@@ -40,6 +72,9 @@ async def answer_market_question(question: str) -> dict:
             "updated_at": detail.get("updated_at"),
             "sources": [],
         }
+
+    if symbol and any(term in lowered for term in ("why", "reason", "news", "rising", "falling", "up", "down")):
+        return await _answer_single_stock_reason(symbol, normalized)
 
     if any(term in lowered for term in ("strong", "strongest", "gainer", "gainers", "rising", "up today")):
         intent = "strong"
@@ -62,7 +97,7 @@ async def answer_market_question(question: str) -> dict:
     answer = f'{heading}:\n' + "\n".join(_mover_line(item) for item in movers)
     sources = []
     if any(term in lowered for term in ("why", "reason", "news", "because")) and movers:
-        news_groups = await asyncio.gather(*(fetch_stock_news_yfinance(item["symbol"]) for item in movers))
+        news_groups = await asyncio.gather(*(_news_with_urls(item["symbol"]) for item in movers))
         fallback_reasons = {}
         for item, news in zip(movers, news_groups):
             if not news:
@@ -72,7 +107,8 @@ async def answer_market_question(question: str) -> dict:
             fallback_reasons[item["symbol"]] = f'Recent coverage reports “{story["title"]}”; this provides context but does not prove causation.'
             sources.extend(
                 {"symbol": item["symbol"], "title": source["title"], "url": source["url"]}
-                for source in news[:3]
+                for source in news
+                if _has_public_url([source])
             )
         reasons = await analyze_movers_with_gemini(normalized, movers, news_groups) or fallback_reasons
         answer = f'{heading}:\n' + "\n".join(_mover_line(item, reasons.get(item["symbol"], "No recent news evidence clearly explains the move.")) for item in movers)

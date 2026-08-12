@@ -14,6 +14,9 @@ def _retrieval_context(movers: list[dict], news_groups: list[list[dict]]) -> str
     documents = []
     for mover, stories in zip(movers, news_groups):
         for story in stories[:3]:
+            url = story.get("url")
+            if not isinstance(url, str) or not url.startswith(("https://", "http://")):
+                continue
             documents.append({
                 "symbol": mover["symbol"],
                 "daily_change_percent": mover["change_percent"],
@@ -21,7 +24,7 @@ def _retrieval_context(movers: list[dict], news_groups: list[list[dict]]) -> str
                 "summary": story.get("summary") or "No summary supplied by the news provider.",
                 "publisher": story.get("publisher"),
                 "published_at": story.get("published_at"),
-                "url": story.get("url"),
+                "url": url,
             })
     return json.dumps(documents, ensure_ascii=False, default=str)
 
