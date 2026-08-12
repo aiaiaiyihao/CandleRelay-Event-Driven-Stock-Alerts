@@ -116,9 +116,21 @@ function formatChartTimestamp(timestamp, interval, full = false) {
   })
 }
 
-function ChartTooltip({ active, payload, label }) {
+function formatChartNumber(value) {
+  return Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(value)
+}
+
+function ChartTooltip({ active, payload, label, chartMode, averages }) {
   if (!active || !payload?.length) return null
-  return <div className="chart-tooltip"><span>{payload[0].payload.tooltipDate || label}</span>{payload.map((item) => <div key={item.dataKey}><i style={{ background: item.color }} />{item.name}<strong>{item.dataKey === 'volume' ? Number(item.value).toLocaleString('en-US') : `$${Number(item.value).toFixed(2)}`}</strong></div>)}</div>
+  const point = payload[0].payload
+  if (chartMode === 'candle') {
+    const rows = [['O', point.open, 'price'], ['H', point.high, 'high'], ['L', point.low, 'low'], ['C', point.close, 'close'], ['VOL', point.volume, 'volume']]
+    if (averages.sma_20 && Number.isFinite(point.sma_20)) rows.push(['SMA20', point.sma_20, 'sma20'])
+    if (averages.sma_50 && Number.isFinite(point.sma_50)) rows.push(['SMA50', point.sma_50, 'sma50'])
+    if (averages.sma_200 && Number.isFinite(point.sma_200)) rows.push(['SMA200', point.sma_200, 'sma200'])
+    return <div className="chart-tooltip candle-tooltip"><span>{point.tooltipDate || label}</span>{rows.map(([name, value, tone]) => <div key={name}><i className={tone} />{name}<strong>{tone === 'volume' ? formatChartNumber(value) : `$${Number(value).toFixed(2)}`}</strong></div>)}</div>
+  }
+  return <div className="chart-tooltip"><span>{point.tooltipDate || label}</span>{payload.filter((item) => item.dataKey !== 'volume').map((item) => <div key={item.dataKey}><i style={{ background: item.color }} />{item.name}<strong>${Number(item.value).toFixed(2)}</strong></div>)}</div>
 }
 
 function Candlestick({ x, width, payload, background, domain }) {
@@ -130,10 +142,10 @@ function Candlestick({ x, width, payload, background, domain }) {
   const openY = toY(payload.open)
   const closeY = toY(payload.close)
   const color = payload.close >= payload.open ? '#5fd398' : '#ee7951'
-  const candleWidth = Math.max(2, Math.min(width * 0.72, 9))
+  const candleWidth = Math.max(4, Math.min(width * 0.72, 10))
   const bodyTop = Math.min(openY, closeY)
   const bodyHeight = Math.max(1.5, Math.abs(closeY - openY))
-  return <g className="candlestick"><line x1={center} x2={center} y1={toY(payload.high)} y2={toY(payload.low)} stroke={color} strokeWidth="1" /><rect x={center - candleWidth / 2} y={bodyTop} width={candleWidth} height={bodyHeight} fill={color} /></g>
+  return <g className="candlestick"><line x1={center} x2={center} y1={toY(payload.high)} y2={toY(payload.low)} stroke={color} strokeWidth="1" /><rect x={center - candleWidth / 2} y={bodyTop} width={candleWidth} height={bodyHeight} rx=".5" fill={color} /></g>
 }
 
 function MoverList({ title, items, tone, page, setPage, selectedSymbol, selectSymbol, previewSymbol, cancelPreview, tracked, trackSymbol, untrackSymbol }) {
@@ -158,13 +170,13 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
   const [panning, setPanning] = useState(false)
   const panStart = useRef(null)
   const zoomRatios = [1, 0.75, 0.5, 0.25, 0.125]
-  const yPaddingRatios = [0.3, 0.16, 0.07, 0.02]
+  const yPaddingRatios = [0.07, 0.05, 0.03, 0.015]
   const visibleCount = Math.max(10, Math.ceil(data.length * zoomRatios[zoomLevel]))
   const maximumPan = Math.max(0, data.length - visibleCount)
   const visibleEnd = data.length - panOffset
   const visibleData = useMemo(() => data.slice(Math.max(0, visibleEnd - visibleCount), visibleEnd), [data, visibleCount, visibleEnd])
   const yDomain = useMemo(() => {
-    const keys = [chartMode === 'candle' ? ['open', 'high', 'low', 'close'] : ['close'], ...Object.keys(averages).filter((key) => averages[key])].flat()
+    const keys = [chartMode === 'candle' ? ['high', 'low'] : ['close'], ...Object.keys(averages).filter((key) => averages[key])].flat()
     const values = visibleData.flatMap((point) => keys.map((key) => point[key]).filter((value) => Number.isFinite(value)))
     if (!values.length) return ['auto', 'auto']
     const minimum = Math.min(...values)
@@ -247,8 +259,8 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
           <XAxis dataKey="date" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} minTickGap={34} />
           <YAxis domain={yDomain} allowDataOverflow={false} orientation="right" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} width={52} tickFormatter={(value) => `$${Number(value).toFixed(0)}`} />
           <YAxis yAxisId="volume" domain={[0, (maximum) => Math.max(maximum * 4.5, 1)]} hide />
-          <Tooltip content={<ChartTooltip />} />
-          <Bar yAxisId="volume" dataKey="volume" name="Volume" fill="#5c6260" fillOpacity={0.42} maxBarSize={12} isAnimationActive={false} />
+          <Tooltip content={<ChartTooltip chartMode={chartMode} averages={averages} />} cursor={{ stroke: '#c7c8c2', strokeWidth: 1, strokeOpacity: 0.7 }} />
+          <Bar yAxisId="volume" dataKey="volume" name="Volume" fill="#5c6260" fillOpacity={0.3} maxBarSize={12} isAnimationActive={false} />
           {chartMode === 'line' ? <Area type="monotone" dataKey="close" name="Price" stroke="#e9e7e1" strokeWidth={2} fill={`url(#${compact ? 'dashboardPriceFill' : 'favoritePriceFill'})`} dot={false} /> : <Bar dataKey="close" name="Price" fill="transparent" background={{ fill: 'transparent' }} shape={(props) => <Candlestick {...props} domain={yDomain} />} isAnimationActive={false} />}
           {averages.sma_20 && <Line type="monotone" dataKey="sma_20" name="SMA 20" stroke="#e76d2d" strokeWidth={1.5} dot={false} />}
           {averages.sma_50 && <Line type="monotone" dataKey="sma_50" name="SMA 50" stroke="#5fd398" strokeWidth={1.4} dot={false} />}
