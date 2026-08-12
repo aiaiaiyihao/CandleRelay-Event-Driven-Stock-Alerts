@@ -142,9 +142,8 @@ async def answer_market_question(question: str, context_symbol: str | None = Non
         answer += "\n\nToday's Top 10 Losers:\n" + "\n".join(_mover_line(item) for item in losers)
         return {"intent": "market", "answer": answer, "updated_at": overview.get("updated_at"), "sources": []}
 
-    symbol = context_symbol.upper() if context_symbol and not is_ranked_mover_question else None
-    if not symbol and not is_ranked_mover_question:
-        symbol = await _resolve_symbol(normalized)
+    resolved_symbol = await _resolve_symbol(normalized) if not is_ranked_mover_question else None
+    symbol = resolved_symbol or (context_symbol.upper() if context_symbol and not is_ranked_mover_question else None)
     if symbol and any(term in lowered for term in ("price", "trading", "quote", "how much")):
         detail = await fetch_stock_detail_yfinance(symbol)
         direction = "up" if (detail.get("change_percent") or 0) >= 0 else "down"

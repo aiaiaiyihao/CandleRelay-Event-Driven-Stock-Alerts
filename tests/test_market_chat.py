@@ -95,7 +95,7 @@ def test_market_chat_resolves_a_company_name_before_returning_its_overview():
         patch("app.services.market_chat_service.fetch_stock_detail_yfinance", new=AsyncMock(return_value=detail)),
         patch("app.services.market_chat_service.summarize_stock_news_with_gemini", new=AsyncMock(return_value="• Tesla updated its vehicle lineup.")),
     ):
-        response = client().post("/market/chat", json={"question": "How is Tesla today?"})
+        response = client().post("/market/chat", json={"question": "How is Tesla today?", "context_symbol": "PLAG"})
     assert response.status_code == 200
     assert response.json()["symbol"] == "TSLA"
     assert "Tesla, Inc. (TSLA) is $340.00" in response.json()["answer"]
