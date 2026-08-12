@@ -83,11 +83,11 @@ const CHART_PERIODS = [['30m', '30 MIN'], ['60m', '60 MIN'], ['1d', '1D'], ['1wk
 const CHART_PERIOD_INFO = {
   '30m': '30 minutes · 1-minute points',
   '60m': '60 minutes · 1-minute points',
-  '1d': '1 trading day · 1-minute points',
-  '1wk': '5 trading days · 10-minute points',
-  '1mo': 'about 22 trading days · 4-hour points',
+  '1d': '1 trading day · 5-minute points',
+  '1wk': '5 trading days · 30-minute points',
+  '1mo': '1 month · 60-minute points',
   '3mo': 'about 63 trading days · daily points',
-  '1y': 'about 252 trading days · 2-day points',
+  '1y': 'about 252 trading days · daily points',
   '5y': 'about 1,260 trading days · weekly points',
   max: 'full available history · monthly points',
 }

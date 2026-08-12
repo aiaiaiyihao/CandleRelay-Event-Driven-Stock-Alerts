@@ -19,14 +19,14 @@ CHART_INTERVALS = {
     "1mo": {"history_period": "max", "points": {"1mo": 1, "3mo": 3, "6mo": 6, "1y": 12}},
 }
 CHART_PRESETS = {
-    "30m": {"history_period": "5d", "source_interval": "1m", "interval": "1m", "points": 30},
-    "60m": {"history_period": "5d", "source_interval": "1m", "interval": "1m", "points": 60},
-    "1d": {"history_period": "5d", "source_interval": "1m", "interval": "1m", "points": 390},
-    "1wk": {"history_period": "60d", "source_interval": "5m", "interval": "10m", "aggregate": "10min", "points": 195},
-    "1mo": {"history_period": "730d", "source_interval": "60m", "interval": "4h", "aggregate": "4h", "points": 44},
-    "3mo": {"history_period": "2y", "source_interval": "1d", "interval": "1d", "points": 66},
-    "1y": {"history_period": "5y", "source_interval": "1d", "interval": "2d", "aggregate_rows": 2, "points": 126},
-    "5y": {"history_period": "max", "source_interval": "1wk", "interval": "1wk", "points": 260},
+    "30m": {"history_period": "1d", "source_interval": "1m", "interval": "1m", "points": 30},
+    "60m": {"history_period": "1d", "source_interval": "1m", "interval": "1m", "points": 60},
+    "1d": {"history_period": "1d", "source_interval": "5m", "interval": "5m", "points": None},
+    "1wk": {"history_period": "5d", "source_interval": "30m", "interval": "30m", "points": None},
+    "1mo": {"history_period": "1mo", "source_interval": "60m", "interval": "60m", "points": None},
+    "3mo": {"history_period": "3mo", "source_interval": "1d", "interval": "1d", "points": None},
+    "1y": {"history_period": "1y", "source_interval": "1d", "interval": "1d", "points": None},
+    "5y": {"history_period": "5y", "source_interval": "1wk", "interval": "1wk", "points": None},
     "max": {"history_period": "max", "source_interval": "1mo", "interval": "1mo", "points": None},
 }
 MARKET_INDEXES = {
