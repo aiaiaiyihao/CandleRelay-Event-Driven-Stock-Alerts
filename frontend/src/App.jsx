@@ -394,6 +394,28 @@ function App() {
     else setFavoriteNews([])
   }, [page, user, tracked])
 
+  async function refreshFavoriteNews() {
+    if (!tracked.length) return
+    setBusy('favorite-news')
+    try {
+      setFavoriteNews(await api.favoriteNews(true))
+      setFavoriteNewsPage(0)
+    } finally {
+      setBusy('')
+    }
+  }
+
+  async function refreshStockNews() {
+    if (!selectedSymbol || !stockDetail) return
+    setBusy('stock-news')
+    try {
+      const news = await api.stockNews(selectedSymbol, true)
+      setStockDetail((detail) => detail ? { ...detail, news } : detail)
+    } finally {
+      setBusy('')
+    }
+  }
+
   useEffect(() => {
     if (page === 'favorites' && tracked.length && !tracked.some((item) => item.symbol === selectedSymbol)) {
       setSelectedSymbol(tracked[0].symbol)
@@ -811,7 +833,7 @@ function App() {
             ].map(([label, value, format]) => <div key={label}><span>{label}</span><strong>{value == null ? '—' : format === 'price' ? `$${Number(value).toFixed(2)}` : format === 'compact' ? Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(value) : Number(value).toLocaleString()}</strong></div>)}</div>
           </section>
           <aside className="stock-news panel">
-            <div className="stock-news-heading"><div><p className="eyebrow">LATEST COMPANY COVERAGE</p><h2>Major News</h2></div><span>UP TO 5</span></div>
+            <div className="stock-news-heading"><div><p className="eyebrow">LATEST COMPANY COVERAGE</p><h2>Major News</h2></div><div className="news-heading-actions"><span>UP TO 5</span><button onClick={refreshStockNews} disabled={busy === 'stock-news'}>{busy === 'stock-news' ? 'REFRESHING…' : '↻ REFRESH'}</button></div></div>
             <div className="stock-news-list">
               {stockDetail.news?.length ? stockDetail.news.map((item) => <a key={`${item.url}-${item.title}`} href={item.url} target="_blank" rel="noreferrer"><strong>{item.title}</strong><span>{item.publisher}{item.published_at ? ` · ${new Date(item.published_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</span></a>) : <div className="stock-news-empty">NO RECENT NEWS AVAILABLE</div>}
             </div>
@@ -862,7 +884,7 @@ function App() {
           </div>
       </section>
       <section className="favorite-news panel">
-        <div className="favorite-news-heading"><div><p className="eyebrow">YOUR WATCHLIST · LATEST COVERAGE</p><h2>Favorites News</h2></div><span>{favoriteNews.length} STORIES</span></div>
+        <div className="favorite-news-heading"><div><p className="eyebrow">YOUR WATCHLIST · LATEST COVERAGE</p><h2>Favorites News</h2></div><div className="news-heading-actions"><span>{favoriteNews.length} STORIES</span><button onClick={refreshFavoriteNews} disabled={!tracked.length || busy === 'favorite-news'}>{busy === 'favorite-news' ? 'REFRESHING…' : '↻ REFRESH ALL'}</button></div></div>
         <div className="favorite-news-grid">
           {visibleFavoriteNews.length ? visibleFavoriteNews.map((item) => <a key={`${item.symbol}-${item.url}`} href={item.url} target="_blank" rel="noreferrer"><span>{item.symbol}</span><strong>{item.title}</strong><small>{item.publisher}{item.published_at ? ` · ${new Date(item.published_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</small></a>) : <div className="favorite-news-empty">{tracked.length ? 'NO RECENT NEWS AVAILABLE' : 'ADD FAVORITES TO BUILD YOUR NEWS FEED'}</div>}
         </div>

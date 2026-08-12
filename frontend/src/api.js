@@ -29,7 +29,7 @@ export const api = {
   sectorStocks: (sector, page = 1, sortOrder = 'desc') => request(`/market/sectors/${encodeURIComponent(sector)}/stocks?page=${page}&page_size=10&sort_order=${sortOrder}`),
   marketQuotes: (symbols) => request(`/market/quotes?symbols=${encodeURIComponent(symbols.join(','))}`),
   favorites: () => request('/favorites'),
-  favoriteNews: () => request('/favorites/news'),
+  favoriteNews: (refresh = false) => request(`/favorites/news${refresh ? '?refresh=true' : ''}`),
   addFavorite: (symbol) => request('/favorites', {
     method: 'POST',
     body: JSON.stringify({ symbol }),
@@ -59,5 +59,6 @@ export const api = {
   quote: (symbol) => request(`/prices/latest?symbol=${encodeURIComponent(symbol)}`),
   searchStocks: (query) => request(`/stocks/search?q=${encodeURIComponent(query)}`),
   stockDetail: (symbol) => request(`/stocks/${encodeURIComponent(symbol)}/detail`),
+  stockNews: (symbol, refresh = false) => request(`/stocks/${encodeURIComponent(symbol)}/news${refresh ? '?refresh=true' : ''}`),
   chart: (symbol, period) => request(`/stocks/${encodeURIComponent(symbol)}/chart?period=${encodeURIComponent(period)}`),
 }
