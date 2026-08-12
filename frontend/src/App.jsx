@@ -83,11 +83,11 @@ const CHART_PERIODS = [['30m', '30 MIN'], ['60m', '60 MIN'], ['1d', '1D'], ['1wk
 const CHART_PERIOD_INFO = {
   '30m': '30 minutes · 1-minute points',
   '60m': '60 minutes · 1-minute points',
-  '1d': '1 trading day · 1-minute points',
-  '1wk': '5 trading days · 10-minute points',
-  '1mo': 'about 22 trading days · 4-hour points',
+  '1d': '1 trading day · 5-minute points',
+  '1wk': '5 trading days · 30-minute points',
+  '1mo': '1 month · 60-minute points',
   '3mo': 'about 63 trading days · daily points',
-  '1y': 'about 252 trading days · 2-day points',
+  '1y': 'about 252 trading days · daily points',
   '5y': 'about 1,260 trading days · weekly points',
   max: 'full available history · monthly points',
 }
@@ -116,12 +116,45 @@ function formatChartTimestamp(timestamp, interval, full = false) {
   })
 }
 
-function ChartTooltip({ active, payload, label }) {
-  if (!active || !payload?.length) return null
-  return <div className="chart-tooltip"><span>{payload[0].payload.tooltipDate || label}</span>{payload.map((item) => <div key={item.dataKey}><i style={{ background: item.color }} />{item.name}<strong>{item.dataKey === 'volume' ? Number(item.value).toLocaleString('en-US') : `$${Number(item.value).toFixed(2)}`}</strong></div>)}</div>
+function formatChartAxisTimestamp(timestamp, interval, period) {
+  const value = new Date(timestamp)
+  if (period === '1wk') return value.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
+  if (period === '1mo' || period === '3mo') return value.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  if (period === '1y') return value.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()
+  if (period === '5y' || period === 'max') return value.toLocaleDateString('en-US', { year: 'numeric' })
+  if (INTRADAY_INTERVALS.has(interval)) {
+    return value.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  }
+  return value.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: interval === '1mo' ? 'numeric' : undefined })
 }
 
-function Candlestick({ x, width, payload, background, domain }) {
+function chartPriceDecimals(domain) {
+  if (!Array.isArray(domain) || !domain.every(Number.isFinite)) return 0
+  const range = Math.abs(domain[1] - domain[0])
+  if (range < 0.1) return 3
+  if (range < 2) return 2
+  if (range < 20) return 1
+  return 0
+}
+
+function formatChartNumber(value) {
+  return Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(value)
+}
+
+function ChartTooltip({ active, payload, label, chartMode, averages }) {
+  if (!active || !payload?.length) return null
+  const point = payload[0].payload
+  if (chartMode === 'candle') {
+    const rows = [['O', point.open, 'price'], ['H', point.high, 'high'], ['L', point.low, 'low'], ['C', point.close, 'close'], ['VOL', point.volume, 'volume']]
+    if (averages.sma_20 && Number.isFinite(point.sma_20)) rows.push(['SMA20', point.sma_20, 'sma20'])
+    if (averages.sma_50 && Number.isFinite(point.sma_50)) rows.push(['SMA50', point.sma_50, 'sma50'])
+    if (averages.sma_200 && Number.isFinite(point.sma_200)) rows.push(['SMA200', point.sma_200, 'sma200'])
+    return <div className="chart-tooltip candle-tooltip"><span>{point.tooltipDate || label}</span>{rows.map(([name, value, tone]) => <div key={name}><i className={tone} />{name}<strong>{tone === 'volume' ? formatChartNumber(value) : `$${Number(value).toFixed(2)}`}</strong></div>)}</div>
+  }
+  return <div className="chart-tooltip"><span>{point.tooltipDate || label}</span>{payload.filter((item) => item.dataKey !== 'volume').map((item) => <div key={item.dataKey}><i style={{ background: item.color }} />{item.name}<strong>${Number(item.value).toFixed(2)}</strong></div>)}</div>
+}
+
+function Candlestick({ x, width, payload, background, domain, isActive }) {
   if (!payload || !background || !domain.every(Number.isFinite)) return null
   const [minimum, maximum] = domain
   const range = Math.max(maximum - minimum, 0.000001)
@@ -130,27 +163,27 @@ function Candlestick({ x, width, payload, background, domain }) {
   const openY = toY(payload.open)
   const closeY = toY(payload.close)
   const color = payload.close >= payload.open ? '#5fd398' : '#ee7951'
-  const candleWidth = Math.max(2, Math.min(width * 0.72, 9))
+  const candleWidth = Math.max(4, Math.min(width * 0.72, 10))
   const bodyTop = Math.min(openY, closeY)
   const bodyHeight = Math.max(1.5, Math.abs(closeY - openY))
-  return <g className="candlestick"><line x1={center} x2={center} y1={toY(payload.high)} y2={toY(payload.low)} stroke={color} strokeWidth="1" /><rect x={center - candleWidth / 2} y={bodyTop} width={candleWidth} height={bodyHeight} fill={color} /></g>
+  return <g className={`candlestick ${isActive ? 'active' : ''}`} opacity={isActive ? 1 : 0.9}><line x1={center} x2={center} y1={toY(payload.high)} y2={toY(payload.low)} stroke={color} strokeWidth={isActive ? "1.35" : "1"} /><rect x={center - candleWidth / 2} y={bodyTop} width={candleWidth} height={bodyHeight} rx=".5" fill={color} stroke={isActive ? '#f1f0eb' : 'none'} strokeWidth=".55" /></g>
 }
 
 function MoverList({ title, items, tone, page, setPage, selectedSymbol, selectSymbol, previewSymbol, cancelPreview, tracked, trackSymbol, untrackSymbol }) {
-  const pageSize = 10
+  const pageSize = 15
   const pageCount = Math.max(1, Math.ceil(items.length / pageSize))
   const safePage = Math.min(page, pageCount - 1)
   const visibleItems = items.slice(safePage * pageSize, (safePage + 1) * pageSize)
   return (
     <div className="mover-list">
-      <h3>{title}<span>TOP 50 · 10 / PAGE</span></h3>
+      <h3>{title}<span>TOP 50 · 15 / PAGE</span></h3>
       {visibleItems.map((item, index) => <div className={`mover-row ${selectedSymbol === item.symbol ? 'selected' : ''}`} key={item.symbol} onMouseEnter={() => previewSymbol(item.symbol)} onMouseLeave={cancelPreview} onClick={() => { cancelPreview(); selectSymbol(item.symbol) }} role="button" tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && selectSymbol(item.symbol)}><span>{String((safePage * pageSize) + index + 1).padStart(2, '0')}</span><strong>{item.symbol}</strong><em>${item.price.toFixed(2)}</em><b className={tone}>{item.change_percent >= 0 ? '+' : ''}{item.change_percent.toFixed(2)}%</b><button className={tracked.some((favorite) => favorite.symbol === item.symbol) ? 'star active' : 'star'} onClick={(event) => { event.stopPropagation(); cancelPreview(); tracked.some((favorite) => favorite.symbol === item.symbol) ? untrackSymbol(item.symbol) : trackSymbol(item.symbol) }} aria-label={`Toggle ${item.symbol} favorite`}>★</button></div>)}
       <div className="mover-pagination"><button disabled={safePage === 0} onClick={() => setPage(safePage - 1)} aria-label={`Previous ${title.toLowerCase()} page`}>←</button><span>{safePage + 1} / {pageCount}</span><button disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)} aria-label={`Next ${title.toLowerCase()} page`}>→</button></div>
     </div>
   )
 }
 
-function MarketChart({ symbol, displayName, period, setPeriod, data, message, averages, setAverages, compact = false, emphasizeTicker = false }) {
+function MarketChart({ symbol, displayName, period, setPeriod, data, message, averages, setAverages, compact = false, emphasizeTicker = false, quote = null }) {
   const [chartMode, setChartMode] = useState('line')
   const [zoomLevel, setZoomLevel] = useState(0)
   const [yStretch, setYStretch] = useState(0)
@@ -158,13 +191,13 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
   const [panning, setPanning] = useState(false)
   const panStart = useRef(null)
   const zoomRatios = [1, 0.75, 0.5, 0.25, 0.125]
-  const yPaddingRatios = [0.3, 0.16, 0.07, 0.02]
+  const yPaddingRatios = [0.07, 0.05, 0.03, 0.015]
   const visibleCount = Math.max(10, Math.ceil(data.length * zoomRatios[zoomLevel]))
   const maximumPan = Math.max(0, data.length - visibleCount)
   const visibleEnd = data.length - panOffset
   const visibleData = useMemo(() => data.slice(Math.max(0, visibleEnd - visibleCount), visibleEnd), [data, visibleCount, visibleEnd])
   const yDomain = useMemo(() => {
-    const keys = [chartMode === 'candle' ? ['open', 'high', 'low', 'close'] : ['close'], ...Object.keys(averages).filter((key) => averages[key])].flat()
+    const keys = [chartMode === 'candle' ? ['high', 'low'] : ['close'], ...Object.keys(averages).filter((key) => averages[key])].flat()
     const values = visibleData.flatMap((point) => keys.map((key) => point[key]).filter((value) => Number.isFinite(value)))
     if (!values.length) return ['auto', 'auto']
     const minimum = Math.min(...values)
@@ -173,6 +206,7 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
     const padding = range * yPaddingRatios[yStretch]
     return [minimum - padding, maximum + padding]
   }, [visibleData, averages, yStretch, chartMode])
+  const priceDecimals = chartPriceDecimals(yDomain)
 
   useEffect(() => {
     setZoomLevel(0)
@@ -214,7 +248,7 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
   return (
     <section className={`stock-chart-panel panel ${compact ? 'compact-chart' : ''}`} id={compact ? 'dashboard-chart' : 'stock-chart'}>
       <div className="chart-header">
-        <div className={`chart-symbol ${emphasizeTicker ? 'ticker-emphasis' : ''}`}><span>SELECTED MARKET</span><h2>{emphasizeTicker ? symbol : displayName || symbol}</h2>{displayName && displayName !== symbol && <p>{emphasizeTicker ? displayName : symbol}</p>}</div>
+        <div className={`chart-symbol ${compact || emphasizeTicker ? 'ticker-emphasis' : ''}`}><span>SELECTED MARKET</span><h2>{compact || emphasizeTicker ? symbol : displayName || symbol}</h2>{displayName && displayName !== symbol && <p>{compact || emphasizeTicker ? displayName : symbol}</p>}{compact && quote && <div className="chart-quote"><strong>${Number(quote.price).toFixed(2)}</strong><em className={quote.change_percent >= 0 ? 'up' : 'down'}>{quote.change_percent >= 0 ? '+' : ''}{quote.change_percent.toFixed(2)}%</em></div>}</div>
         <div className="chart-controls">
           <div className="chart-mode-switcher" aria-label="Chart type">
             <button className={chartMode === 'line' ? 'active' : ''} onClick={() => setChartMode('line')}>LINE</button>
@@ -241,14 +275,14 @@ function MarketChart({ symbol, displayName, period, setPeriod, data, message, av
           <button disabled={yStretch === yPaddingRatios.length - 1} onClick={() => setYStretch((value) => Math.min(yPaddingRatios.length - 1, value + 1))} aria-label="Stretch price axis">+</button>
           <button className="chart-reset" onClick={resetChartView}>RESET</button>
         </div>
-        {visibleData.length ? <ResponsiveContainer width="100%" height="100%"><ComposedChart data={visibleData} margin={{ top: 62, right: 14, bottom: 4, left: 0 }}>
+        {visibleData.length ? <ResponsiveContainer width="100%" height="100%"><ComposedChart data={visibleData} margin={{ top: 62, right: 22, bottom: 4, left: 12 }}>
           <defs><linearGradient id={compact ? 'dashboardPriceFill' : 'favoritePriceFill'} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#e76d2d" stopOpacity={0.28} /><stop offset="100%" stopColor="#e76d2d" stopOpacity={0} /></linearGradient></defs>
           <CartesianGrid stroke="#252728" vertical={false} />
-          <XAxis dataKey="date" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} minTickGap={34} />
-          <YAxis domain={yDomain} allowDataOverflow={false} orientation="right" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} width={52} tickFormatter={(value) => `$${Number(value).toFixed(0)}`} />
+          <XAxis dataKey="axisDate" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} minTickGap={44} interval="preserveStartEnd" />
+          <YAxis domain={yDomain} allowDataOverflow={false} orientation="right" stroke="#5d605c" tick={{ fontSize: 9, fontFamily: 'DM Mono' }} tickLine={false} axisLine={false} width={58} tickFormatter={(value) => `$${Number(value).toFixed(priceDecimals)}`} />
           <YAxis yAxisId="volume" domain={[0, (maximum) => Math.max(maximum * 4.5, 1)]} hide />
-          <Tooltip content={<ChartTooltip />} />
-          <Bar yAxisId="volume" dataKey="volume" name="Volume" fill="#5c6260" fillOpacity={0.42} maxBarSize={12} isAnimationActive={false} />
+          <Tooltip content={<ChartTooltip chartMode={chartMode} averages={averages} />} cursor={{ stroke: '#c7c8c2', strokeWidth: 1, strokeOpacity: 0.7 }} />
+          <Bar yAxisId="volume" dataKey="volume" name="Volume" fill="#5c6260" fillOpacity={0.3} activeBar={{ fill: '#9da29d', fillOpacity: 0.52 }} maxBarSize={12} isAnimationActive={false} />
           {chartMode === 'line' ? <Area type="monotone" dataKey="close" name="Price" stroke="#e9e7e1" strokeWidth={2} fill={`url(#${compact ? 'dashboardPriceFill' : 'favoritePriceFill'})`} dot={false} /> : <Bar dataKey="close" name="Price" fill="transparent" background={{ fill: 'transparent' }} shape={(props) => <Candlestick {...props} domain={yDomain} />} isAnimationActive={false} />}
           {averages.sma_20 && <Line type="monotone" dataKey="sma_20" name="SMA 20" stroke="#e76d2d" strokeWidth={1.5} dot={false} />}
           {averages.sma_50 && <Line type="monotone" dataKey="sma_50" name="SMA 50" stroke="#5fd398" strokeWidth={1.4} dot={false} />}
@@ -454,6 +488,7 @@ function App() {
         setChartData(result.points.map((point) => ({
           ...point,
           date: formatChartTimestamp(point.timestamp, result.interval),
+          axisDate: formatChartAxisTimestamp(point.timestamp, result.interval, chartPeriod),
           tooltipDate: formatChartTimestamp(point.timestamp, result.interval, true),
         })))
         setChartMessage('')
@@ -857,7 +892,7 @@ function App() {
               <MoverList title="TOP LOSERS" items={market.losers} tone="down" page={moverPages.losers} setPage={(nextPage) => setMoverPages((pages) => ({ ...pages, losers: nextPage }))} selectedSymbol={selectedSymbol} selectSymbol={navigateStock} previewSymbol={previewSymbolLater} cancelPreview={cancelSymbolPreview} tracked={tracked} trackSymbol={trackSymbol} untrackSymbol={untrackSymbol} />
             </div>
           </div>
-          <MarketChart symbol={selectedSymbol} displayName={marketBySymbol[selectedSymbol]?.name} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
+          <MarketChart symbol={selectedSymbol} displayName={marketBySymbol[selectedSymbol]?.name} quote={marketBySymbol[selectedSymbol]} period={chartPeriod} setPeriod={setChartPeriod} data={chartData} message={chartMessage} averages={visibleAverages} setAverages={setVisibleAverages} compact />
         </div>
         <section className="sector-panel panel">
           <div className="sector-heading"><div><p className="eyebrow">SECTOR ETF PROXY</p><h3>Sector performance</h3></div><span>RANKED HIGH TO LOW · CLICK TO EXPLORE</span></div>

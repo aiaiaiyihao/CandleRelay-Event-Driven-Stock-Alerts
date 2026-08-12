@@ -19,13 +19,15 @@ CHART_INTERVALS = {
     "1mo": {"history_period": "max", "points": {"1mo": 1, "3mo": 3, "6mo": 6, "1y": 12}},
 }
 CHART_PRESETS = {
+    # history_period intentionally includes pre-range sessions. build_chart_points computes
+    # all indicators from this continuous provider series before points are clipped below.
     "30m": {"history_period": "5d", "source_interval": "1m", "interval": "1m", "points": 30},
     "60m": {"history_period": "5d", "source_interval": "1m", "interval": "1m", "points": 60},
-    "1d": {"history_period": "5d", "source_interval": "1m", "interval": "1m", "points": 390},
-    "1wk": {"history_period": "60d", "source_interval": "5m", "interval": "10m", "aggregate": "10min", "points": 195},
-    "1mo": {"history_period": "730d", "source_interval": "60m", "interval": "4h", "aggregate": "4h", "points": 44},
+    "1d": {"history_period": "5d", "source_interval": "5m", "interval": "5m", "points": 78},
+    "1wk": {"history_period": "60d", "source_interval": "30m", "interval": "30m", "points": 65},
+    "1mo": {"history_period": "730d", "source_interval": "60m", "interval": "60m", "points": 154},
     "3mo": {"history_period": "2y", "source_interval": "1d", "interval": "1d", "points": 66},
-    "1y": {"history_period": "5y", "source_interval": "1d", "interval": "2d", "aggregate_rows": 2, "points": 126},
+    "1y": {"history_period": "5y", "source_interval": "1d", "interval": "1d", "points": 252},
     "5y": {"history_period": "max", "source_interval": "1wk", "interval": "1wk", "points": 260},
     "max": {"history_period": "max", "source_interval": "1mo", "interval": "1mo", "points": None},
 }
@@ -260,7 +262,7 @@ async def fetch_chart_preset_yfinance(symbol: str, period: str) -> dict:
     if period not in CHART_PRESETS:
         raise ValueError(f"Unsupported chart period: {period}")
     config = CHART_PRESETS[period]
-    cache_key = f"candlerelay:stock-chart:{symbol.upper()}:{period}"
+    cache_key = f"candlerelay:stock-chart:v2:{symbol.upper()}:{period}"
     cached = await get_cached_json(cache_key)
     if cached is not None:
         return cached

@@ -53,13 +53,22 @@ def test_chart_supports_intraday_weekly_and_monthly_intervals():
 
 
 def test_chart_presets_use_requested_points_for_each_range():
-    assert CHART_PRESETS["1d"]["interval"] == "1m"
-    assert CHART_PRESETS["1wk"]["interval"] == "10m"
-    assert CHART_PRESETS["1mo"]["interval"] == "4h"
+    assert CHART_PRESETS["1d"]["interval"] == "5m"
+    assert CHART_PRESETS["1wk"]["interval"] == "30m"
+    assert CHART_PRESETS["1mo"]["interval"] == "60m"
     assert CHART_PRESETS["3mo"]["interval"] == "1d"
-    assert CHART_PRESETS["1y"]["interval"] == "2d"
+    assert CHART_PRESETS["1y"]["interval"] == "1d"
     assert CHART_PRESETS["5y"]["interval"] == "1wk"
     assert CHART_PRESETS["max"]["points"] is None
+
+
+def test_chart_presets_fetch_warmup_sessions_before_clipping_display_points():
+    assert CHART_PRESETS["1d"]["history_period"] == "5d"
+    assert CHART_PRESETS["1wk"]["history_period"] == "60d"
+    assert CHART_PRESETS["3mo"]["history_period"] == "2y"
+    assert CHART_PRESETS["1y"]["history_period"] == "5y"
+    assert CHART_PRESETS["1d"]["points"] == 78
+    assert CHART_PRESETS["3mo"]["points"] == 66
 
 
 def test_chart_history_aggregates_ohlcv_without_averaging_prices():
