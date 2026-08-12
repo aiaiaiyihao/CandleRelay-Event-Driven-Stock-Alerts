@@ -1,6 +1,6 @@
 import asyncio
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -29,6 +29,7 @@ def get_favorites(
 
 @router.get("/news", response_model=list[FavoriteNewsItem])
 async def get_favorite_news(
+    refresh: bool = Query(default=False),
     user: User = Depends(require_current_user),
     db: Session = Depends(get_db),
 ):
@@ -40,7 +41,7 @@ async def get_favorite_news(
     if not symbols:
         return []
 
-    results = await asyncio.gather(*(fetch_stock_news_yfinance(symbol) for symbol in symbols))
+    results = await asyncio.gather(*(fetch_stock_news_yfinance(symbol, force_refresh=refresh) for symbol in symbols))
     return [
         {**item, "symbol": symbol}
         for symbol, news in zip(symbols, results)

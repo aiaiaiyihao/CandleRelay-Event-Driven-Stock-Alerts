@@ -68,4 +68,15 @@ def test_favorite_news_are_aggregated_for_the_current_user():
 
     assert response.status_code == 200
     assert response.json()[0]["symbol"] == "NVDA"
-    fetch.assert_awaited_once_with("NVDA")
+    fetch.assert_awaited_once_with("NVDA", force_refresh=False)
+
+
+def test_favorite_news_can_force_refresh_every_symbol():
+    web = client()
+    register(web, "refresh-news@example.com")
+    web.post("/favorites", json={"symbol": "NVDA"})
+    with patch("app.api.favorite_router.fetch_stock_news_yfinance", new=AsyncMock(return_value=[])) as fetch:
+        response = web.get("/favorites/news?refresh=true")
+
+    assert response.status_code == 200
+    fetch.assert_awaited_once_with("NVDA", force_refresh=True)
