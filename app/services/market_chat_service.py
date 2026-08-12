@@ -70,7 +70,10 @@ async def answer_market_question(question: str) -> dict:
                 continue
             story = news[0]
             fallback_reasons[item["symbol"]] = f'Recent coverage reports “{story["title"]}”; this provides context but does not prove causation.'
-            sources.append({"symbol": item["symbol"], "title": story["title"], "url": story["url"]})
+            sources.extend(
+                {"symbol": item["symbol"], "title": source["title"], "url": source["url"]}
+                for source in news[:3]
+            )
         reasons = await analyze_movers_with_gemini(normalized, movers, news_groups) or fallback_reasons
         answer = f'{heading}:\n' + "\n".join(_mover_line(item, reasons.get(item["symbol"], "No recent news evidence clearly explains the move.")) for item in movers)
     return {"intent": intent, "answer": answer, "updated_at": overview.get("updated_at"), "sources": sources}

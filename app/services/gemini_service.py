@@ -7,7 +7,7 @@ from app.core.config import GEMINI_API_KEY, GEMINI_MODEL
 from app.services.cache import get_cached_json, set_cached_json
 
 
-GEMINI_ANALYSIS_TTL_SECONDS = 300
+GEMINI_ANALYSIS_TTL_SECONDS = 1_800
 
 
 def _retrieval_context(movers: list[dict], news_groups: list[list[dict]]) -> str:
@@ -21,6 +21,7 @@ def _retrieval_context(movers: list[dict], news_groups: list[list[dict]]) -> str
                 "summary": story.get("summary") or "No summary supplied by the news provider.",
                 "publisher": story.get("publisher"),
                 "published_at": story.get("published_at"),
+                "url": story.get("url"),
             })
     return json.dumps(documents, ensure_ascii=False, default=str)
 
@@ -53,16 +54,27 @@ Retrieved documents:
 {context}
 """
     payload = {
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"maxOutputTokens": 500, "responseMimeType": "application/json"},
+        "model": GEMINI_MODEL,
+        "input": prompt,
+        "tools": [{"type": "url_context"}],
     }
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+    url = "https://generativelanguage.googleapis.com/v1beta/interactions"
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             response = await client.post(url, headers={"x-goog-api-key": GEMINI_API_KEY}, json=payload)
             response.raise_for_status()
             body = response.json()
-        generated = json.loads(body["candidates"][0]["content"]["parts"][0]["text"])
+        text_blocks = [
+            block["text"]
+            for step in body["steps"]
+            if step.get("type") == "model_output"
+            for block in step.get("content", [])
+            if block.get("type") == "text" and block.get("text")
+        ]
+        generated_text = "\n".join(text_blocks).strip()
+        if generated_text.startswith("```"):
+            generated_text = generated_text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+        generated = json.loads(generated_text)
         rows = generated["analyses"]
     except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError):
         return None

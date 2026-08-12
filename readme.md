@@ -154,9 +154,10 @@ During market hours, rankings are shared through a five-minute Redis cache.
 At 4:05 PM ET on weekdays, the closing worker freezes Dashboard data and warms
 popular and user-favorite stock details until the next 9:30 AM ET opening.
 When `GEMINI_API_KEY` is configured, the Dashboard assistant retrieves cached
-news for leading gainers or losers and asks Gemini Flash-Lite for a grounded
-summary. Gemini answers are cached for five minutes; without a key or during an
-API failure, CandleRelay falls back to its deterministic news-context response.
+news for leading gainers or losers, then lets Gemini URL Context read up to
+three cached news URLs per symbol. Analyses are cached for 30 minutes; if a URL
+is inaccessible, no key is configured, or Gemini is unavailable, CandleRelay
+falls back to the cached Yahoo summary and deterministic news-context response.
 Email alerts are enabled only when `SMTP_HOST` and `SMTP_FROM_EMAIL` are set;
 in-app notifications continue to work without SMTP configuration.
 
