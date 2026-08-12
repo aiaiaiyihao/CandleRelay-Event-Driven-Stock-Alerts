@@ -3,10 +3,20 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas.market import MarketOverview, SectorStocksResponse
+from app.schemas.market_chat import MarketChatRequest, MarketChatResponse
+from app.services.market_chat_service import answer_market_question
 from app.services.yfinance_service import fetch_market_overview, fetch_market_snapshots, fetch_sector_stocks
 
 
 router = APIRouter(prefix="/market", tags=["market"])
+
+
+@router.post("/chat", response_model=MarketChatResponse)
+async def market_chat(request: MarketChatRequest):
+    try:
+        return await answer_market_question(request.question, request.context_symbol)
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
 
 
 @router.get("/overview", response_model=MarketOverview)

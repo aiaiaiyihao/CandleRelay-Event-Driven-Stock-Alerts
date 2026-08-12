@@ -126,7 +126,8 @@ python -m scripts.import_market_bars examples/nvda_daily.csv \
   --symbol NVDA --timeframe 1d --source demo
 ```
 
-Configuration:
+Create `docker/.env` for optional provider credentials used by Docker Compose
+(the file is ignored by Git):
 
 ```text
 DATABASE_URL=postgresql://admin:admin@localhost:5432/marketdb
@@ -135,6 +136,8 @@ KAFKA_BOOTSTRAP=localhost:9092
 KAFKA_SIGNAL_GROUP=crandleRelay-live-rules
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 ALPHA_VANTAGE_API_KEY=optional_api_key_for_market_movers_fallback
+GEMINI_API_KEY=optional_google_ai_studio_api_key
+GEMINI_MODEL=gemini-3.1-flash-lite
 SMTP_HOST=optional_smtp_server
 SMTP_PORT=587
 SMTP_USERNAME=optional_smtp_username
@@ -150,6 +153,11 @@ are used before the stale-cache fallback.
 During market hours, rankings are shared through a five-minute Redis cache.
 At 4:05 PM ET on weekdays, the closing worker freezes Dashboard data and warms
 popular and user-favorite stock details until the next 9:30 AM ET opening.
+When `GEMINI_API_KEY` is configured, the Dashboard assistant retrieves cached
+news for leading gainers or losers, then lets Gemini URL Context read up to
+three cached news URLs per symbol. Analyses are cached for 30 minutes; if a URL
+is inaccessible, no key is configured, or Gemini is unavailable, CandleRelay
+falls back to the cached Yahoo summary and deterministic news-context response.
 Email alerts are enabled only when `SMTP_HOST` and `SMTP_FROM_EMAIL` are set;
 in-app notifications continue to work without SMTP configuration.
 

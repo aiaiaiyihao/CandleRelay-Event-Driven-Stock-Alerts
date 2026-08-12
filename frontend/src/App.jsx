@@ -61,6 +61,24 @@ function Condition({ item, index }) {
   )
 }
 
+function MarketChatAnswer({ answer, role }) {
+  if (role === 'user') return <p>{answer}</p>
+  const marketToken = /(\b[A-Z]{1,5}(?:\.[A-Z])?\b|[+-]?\d+(?:\.\d+)?%|\$\d[\d,.]*)/g
+  const isMarketToken = /^(?:\b[A-Z]{1,5}(?:\.[A-Z])?\b|[+-]?\d+(?:\.\d+)?%|\$\d[\d,.]*)$/
+  return <div className="market-chat-answer">{answer.split('\n').map((line, index) => {
+    if (!line.trim()) return <div className="market-chat-gap" key={`gap-${index}`} />
+    const parts = line.split(marketToken)
+    return <p key={`line-${index}`}>{parts.map((part, partIndex) => isMarketToken.test(part) ? <code key={`${part}-${partIndex}`}>{part}</code> : part)}</p>
+  })}</div>
+}
+
+function MarketChatSources({ sources }) {
+  const sourceList = sources || []
+  const primarySources = Array.from(new Map(sourceList.map((source) => [source.symbol, source])).values())
+  const additionalSources = sourceList.filter((source) => !primarySources.includes(source))
+  return <div className="market-chat-sources"><span>Sources · {sourceList.length}</span>{primarySources.map((source) => <a key={`${source.symbol}-${source.url}`} href={source.url} target="_blank" rel="noreferrer">{source.symbol} ↗</a>)}{additionalSources.length > 0 && <details><summary>+{additionalSources.length}</summary><div>{additionalSources.map((source) => <a key={`${source.symbol}-${source.url}`} href={source.url} target="_blank" rel="noreferrer">{source.symbol} · {source.title} ↗</a>)}</div></details>}</div>
+}
+
 const CHART_PERIODS = [['30m', '30 MIN'], ['60m', '60 MIN'], ['1d', '1D'], ['1wk', '1W'], ['1mo', '1M'], ['3mo', '3M'], ['1y', '1Y'], ['5y', '5Y'], ['max', 'MAX']]
 const CHART_PERIOD_INFO = {
   '30m': '30 minutes · 1-minute points',
@@ -269,6 +287,10 @@ function App() {
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [tracked, setTracked] = useState([])
   const [market, setMarket] = useState({ indexes: [], gainers: [], losers: [], sectors: [], scope: 'Active US-listed stocks', market_state: 'CLOSED', updated_at: null, data_source: 'yfinance', data_status: 'live' })
+  const [chatQuestion, setChatQuestion] = useState('')
+  const [chatOpen, setChatOpen] = useState(false)
+  const [chatContextSymbol, setChatContextSymbol] = useState('')
+  const [chatMessages, setChatMessages] = useState([{ role: 'assistant', answer: "Ask me about a ticker price, today's strongest stocks, weakest stocks, or the news behind those moves.", sources: [] }])
   const [moverPages, setMoverPages] = useState({ gainers: 0, losers: 0 })
   const [sectorStocks, setSectorStocks] = useState({ sector: '', page: 1, page_size: 10, total: 0, stocks: [], updated_at: null })
   const [sectorPage, setSectorPage] = useState(1)
@@ -741,6 +763,25 @@ function App() {
     }
   }
 
+  async function askMarket(question = chatQuestion) {
+    const prompt = question.trim()
+    if (!prompt || busy === 'market-chat') return
+    const rankedMoverQuestion = /strongest|weakest|gainer|loser|market leaders|market laggards/i.test(prompt)
+    const contextSymbol = rankedMoverQuestion ? null : (chatContextSymbol || null)
+    setChatMessages((items) => [...items, { role: 'user', answer: prompt, sources: [] }])
+    setChatQuestion('')
+    setBusy('market-chat')
+    try {
+      const response = await api.marketChat(prompt, contextSymbol)
+      if (response.symbol) setChatContextSymbol(response.symbol)
+      setChatMessages((items) => [...items, { role: 'assistant', ...response }])
+    } catch (error) {
+      setChatMessages((items) => [...items, { role: 'assistant', answer: error.message, sources: [] }])
+    } finally {
+      setBusy('')
+    }
+  }
+
   return (
     <main>
       <header className="topbar">
@@ -792,6 +833,20 @@ function App() {
 
       {page === 'dashboard' && <section className="dashboard-section page-surface" id="dashboard">
         <div className="section-intro"><div><p className="eyebrow">US MARKET COMMAND CENTER</p><h2>Market dashboard</h2></div><div className="market-status"><p>Major indexes and today's leading active US-listed stocks. Select any market to inspect its trend.</p><div><span className={market.market_state === 'OPEN' ? 'open' : ''}>{market.market_state === 'OPEN' ? 'MARKET OPEN' : 'MARKET CLOSED'}{market.updated_at ? ` · UPDATED ${new Date(market.updated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}</span><span className={`market-source ${market.data_status}`}>{market.data_status === 'stale' ? 'REDIS CACHED DATA' : market.data_status === 'fallback' ? 'ALPHA VANTAGE · TOP 20' : 'YFINANCE'}</span><button onClick={refreshMarket} disabled={busy === 'market-refresh'}>{busy === 'market-refresh' ? 'REFRESHING…' : '↻ REFRESH'}</button></div></div></div>
+        <div className={`market-chat-widget ${chatOpen ? 'open' : ''}`}>
+        {chatOpen && <section className="market-chat panel" role="dialog" aria-label="Market Assistant">
+          <div className="market-chat-heading"><div><p className="market-chat-live"><i />LIVE <b>MARKET DATA + NEWS</b></p><h3>Market Assistant</h3></div><span>TOP 50 GAINERS & LOSERS</span></div>
+          <div className="market-chat-body">
+            <div className="market-chat-log" aria-live="polite">
+              {chatMessages.slice(-5).map((item, index) => <article className={item.role} key={`${item.role}-${index}-${item.answer}`}><span>{item.role === 'assistant' ? 'CR' : 'YOU'}</span><div><MarketChatAnswer answer={item.answer} role={item.role} />{item.updated_at && <time>DATA UPDATED {new Date(item.updated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>}{item.sources?.length > 0 && <MarketChatSources sources={item.sources} />}</div></article>)}
+              {busy === 'market-chat' && <article className="assistant thinking"><span>CR</span><p>ANALYZING CACHED MARKET DATA…</p></article>}
+            </div>
+            <div className="market-chat-prompts">{[['Market overview', 'How is the market?'], ['Strongest stocks', 'Which stocks are strongest today?'], ['Why are stocks falling?', 'Why are the weakest stocks falling?']].map(([label, prompt]) => <button key={prompt} onClick={() => askMarket(prompt)} disabled={busy === 'market-chat'}>{label}</button>)}</div>
+            <form onSubmit={(event) => { event.preventDefault(); askMarket() }}><input value={chatQuestion} onChange={(event) => setChatQuestion(event.target.value)} maxLength={300} placeholder="Ask about a ticker, then follow up on its news…" aria-label="Ask the market assistant" /><button disabled={!chatQuestion.trim() || busy === 'market-chat'}>ASK →</button></form>
+          </div>
+        </section>}
+        <button className="market-chat-launcher" onClick={() => setChatOpen((value) => !value)} aria-label={chatOpen ? 'Close Market Assistant' : 'Open Market Assistant'} aria-expanded={chatOpen}><span>{chatOpen ? '×' : 'CR'}</span>{!chatOpen && <b>ASK MARKET</b>}</button>
+        </div>
         <div className="index-strip">
           {market.indexes.map((item) => <button key={item.symbol} className={selectedSymbol === item.symbol ? 'selected' : ''} onClick={() => selectMarketSymbol(item.symbol)}><span>{item.name}</span><strong>{item.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong><em className={item.change_percent >= 0 ? 'up' : 'down'}>{item.change_percent >= 0 ? '+' : ''}{item.change_percent.toFixed(2)}%</em></button>)}
         </div>
