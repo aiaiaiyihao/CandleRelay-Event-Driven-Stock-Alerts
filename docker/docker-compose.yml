@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: admin
       POSTGRES_DB: marketdb
     ports:
-      - "5432:5432"
+      - "15432:5432"
     volumes:
       - signalforge_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -152,3 +152,6 @@ services:
 
 volumes:
   signalforge_pgdata:
+
+#dqwd
+#12312
