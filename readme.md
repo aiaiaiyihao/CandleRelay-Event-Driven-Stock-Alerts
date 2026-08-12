@@ -264,11 +264,11 @@ coarser sampling for longer history:
 | --- | --- | --- | --- |
 | 30 MIN | `30m` | 30 minutes | 1-minute points |
 | 60 MIN | `60m` | 60 minutes | 1-minute points |
-| 1D | `1d` | 1 trading day | 1-minute points |
-| 1W | `1wk` | 5 trading days | 10-minute points |
-| 1M | `1mo` | About 22 trading days | 4-hour points |
+| 1D | `1d` | 1 trading day | 5-minute points |
+| 1W | `1wk` | 5 trading days | 30-minute points |
+| 1M | `1mo` | 1 month | 60-minute points |
 | 3M | `3mo` | About 63 trading days | Daily points |
-| 1Y | `1y` | About 252 trading days | 2-day points |
+| 1Y | `1y` | About 252 trading days | Daily points |
 | 5Y | `5y` | About 1,260 trading days | Weekly points |
 | MAX | `max` | Full available history | Monthly points |
 
